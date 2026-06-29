@@ -1,0 +1,5195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cube Face Solver</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #161513;
+    --panel: #211f1c;
+    --border: #3a352c;
+    --text: #ECE6DD;
+    --text-dim: #9c9488;
+    --accent: #4A8AF0;
+    --success: #5FA86B;
+    --error: #f87171;
+    --free: #D9B53C;
+    --accent-text: #6FA3F2; /* lightened accent for small text directly on panel backgrounds, where the full accent falls short of AA contrast */
+  }
+  * { box-sizing: border-box; }
+  /* Baseline keyboard-focus indicator (WCAG 2.4.7): applies to every
+     interactive element so nothing relies solely on a 1px border-color
+     shift to show focus. Elements with a more specific :focus rule
+     below (e.g. .pattern-input) layer their own treatment on top;
+     this is the floor, not the only signal. Only shows for real
+     keyboard/assistive-tech focus, not mouse clicks. */
+  a:focus-visible, button:focus-visible, input:focus-visible,
+  select:focus-visible, textarea:focus-visible, summary:focus-visible,
+  [tabindex]:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  /* Plain links had no color rule and fell back to the browser's
+     default blue (#0000EE), which only contrasts 1.75:1 against
+     --panel (#211f1c) -- well under WCAG AA's 4.5:1 floor for normal
+     text. Reuse the existing --accent blue instead, which already
+     passes (4.84:1) and keeps link color consistent with the rest of
+     the UI's interactive-element color. */
+  /* Visually hidden but still announced by screen readers -- used for
+     status updates (e.g. plan-run progress) that have an always-visible
+     sighted equivalent elsewhere, so we don't show the text twice. */
+  .sr-only {
+    position: absolute;
+    width: 1px; height: 1px;
+    padding: 0; margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  a { color: var(--accent); }
+  a:visited { color: var(--accent); }
+  a:hover { text-decoration-thickness: 2px; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 16px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .container { max-width: 640px; margin: 0 auto; }
+  h1 {
+    font-family: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
+    font-size: 1.25rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin: 0 0 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  h1::before {
+    content: '';
+    display: inline-block;
+    width: 14px; height: 14px;
+    border-radius: 3px;
+    background: linear-gradient(135deg, var(--accent) 50%, var(--free) 50%);
+    flex-shrink: 0;
+  }
+  .subtitle { color: var(--text-dim); font-size: 0.85rem; margin: 0 0 20px; line-height: 1.4; }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  .panel h2 {
+    font-family: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin: 0 0 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .step-num {
+    background: var(--accent);
+    color: #1a1209;
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .panel-desc { color: var(--text-dim); font-size: 0.8rem; margin: 0 0 14px; line-height: 1.4; }
+
+  .pattern-input {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: #1c1a17;
+    color: var(--text);
+    font-family: 'SF Mono', Consolas, monospace;
+    font-size: 0.95rem;
+    letter-spacing: 0.05em;
+    margin-bottom: 8px;
+  }
+  .pattern-input:focus:not(:focus-visible) { outline: none; }
+  .pattern-input:focus { border-color: var(--accent); }
+  .pattern-status { font-size: 0.78rem; margin: 0 0 12px; min-height: 1.2em; line-height: 1.4; }
+  .pattern-status.status-ok { color: var(--success); }
+  .pattern-status.status-error { color: var(--error); }
+  .pattern-status.status-empty { color: var(--text-dim); }
+  .pattern-preview {
+    display: inline-flex;
+    gap: 1px;
+    vertical-align: middle;
+    margin-right: 8px;
+  }
+  .pattern-preview .bulk-swatch { width: 12px; height: 12px; border-radius: 1px; }
+
+  .accordion {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-top: 4px;
+    overflow: hidden;
+  }
+  .accordion summary {
+    padding: 10px 12px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-dim);
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    user-select: none;
+  }
+  .accordion summary::-webkit-details-marker { display: none; }
+  .accordion summary::before {
+    content: '▸';
+    display: inline-block;
+    transition: transform 0.15s ease;
+    font-size: 0.7rem;
+  }
+  .accordion[open] summary::before { transform: rotate(90deg); }
+  .accordion[open] summary { color: var(--text); border-bottom: 1px solid var(--border); }
+  .accordion-body { padding: 14px 12px; }
+  .section-heading {
+    font-size: 1.05rem;
+    font-weight: 700;
+    margin: 28px 0 12px;
+    padding-left: 11px;
+    border-left: 3px solid var(--accent);
+  }
+  .section-heading:first-of-type { margin-top: 0; }
+  .section-heading .step-badge {
+    display: inline-block;
+    font-family: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--accent-text);
+    background: rgba(74, 138, 240, 0.12);
+    border: 1px solid rgba(74, 138, 240, 0.35);
+    border-radius: 5px;
+    padding: 2px 6px;
+    margin-right: 8px;
+    vertical-align: middle;
+    transform: translateY(-1px);
+  }
+
+  .panel-desc .prep-steps {
+    margin: 0 0 14px;
+    padding-left: 22px;
+  }
+  .panel-desc .prep-steps li {
+    margin-bottom: 10px;
+    line-height: 1.5;
+  }
+  .panel-desc .prep-steps li:last-child { margin-bottom: 0; }
+  .claude-prompt-box {
+    background: #111;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    font-family: 'SF Mono', Consolas, monospace;
+    font-size: 0.78rem;
+    line-height: 1.55;
+    color: var(--text);
+    white-space: pre-wrap;
+    margin: 6px 0 0;
+  }
+
+  .palette {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+  }
+  .swatch {
+    width: 38px; height: 38px;
+    border-radius: 8px;
+    border: 2px solid transparent;
+    cursor: pointer;
+    position: relative;
+    transition: transform 0.1s;
+    padding: 0;
+    font: inherit;
+    display: block;
+  }
+  .swatch:active { transform: scale(0.93); }
+  .swatch.selected { border-color: #fff; box-shadow: 0 0 0 2px var(--accent); }
+  .swatch .label {
+    position: absolute;
+    bottom: -16px; left: 0; right: 0;
+    text-align: center;
+    font-size: 0.6rem;
+    color: var(--text-dim);
+  }
+
+  .faces-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    max-width: 420px;
+    margin: 0 auto 8px;
+  }
+  .face-block { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .face-label { font-size: 0.7rem; color: var(--text-dim); font-weight: 600; }
+  .mini-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2px;
+    width: 84px;
+  }
+  .cell {
+    width: 26px; height: 26px;
+    border-radius: 3px;
+    cursor: pointer;
+    border: 1px solid rgba(255,255,255,0.15);
+    padding: 0;
+    display: block;
+  }
+  .cell.center { cursor: default; opacity: 0.85; }
+  button.cell:disabled { cursor: default; }
+
+  .single-face-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 5px;
+    width: 180px;
+    margin: 0 auto;
+  }
+  .single-face-grid .cell { width: 56px; height: 56px; border-radius: 6px; }
+
+  .which-face-row {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+  }
+  .face-pick-btn {
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: #2e2e2e;
+    color: var(--text);
+    font-size: 0.8rem;
+    cursor: pointer;
+  }
+  .face-pick-btn.active { background: var(--accent); color: #1a1209; border-color: var(--accent); font-weight: 600; }
+
+  button.primary {
+    width: 100%;
+    padding: 12px;
+    border-radius: 10px;
+    border: none;
+    background: var(--accent);
+    color: #1a1209;
+    font-size: 0.95rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    cursor: pointer;
+    margin-top: 4px;
+  }
+  button.primary:disabled { background: #444; color: #888; cursor: not-allowed; }
+  button.primary:active:not(:disabled) { transform: scale(0.99); }
+
+  .result-box {
+    margin-top: 14px;
+    padding: 14px;
+    border-radius: 10px;
+    background: #1e2a1e;
+    border: 1px solid #2d4a2d;
+  }
+  .result-box.error { background: #2a1e1e; border-color: #4a2d2d; }
+  .result-box .status {
+    font-weight: 600;
+    font-size: 0.9rem;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .result-box.error .status { color: var(--error); }
+  .result-box:not(.error) .status { color: var(--success); }
+  .moves-display {
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 1.05rem;
+    line-height: 1.8;
+    background: #111;
+    padding: 12px;
+    border-radius: 8px;
+    word-spacing: 4px;
+    letter-spacing: 0.5px;
+  }
+  .move-count {
+    color: var(--text-dim);
+    font-size: 0.75rem;
+    margin-top: 8px;
+  }
+  .notation-help {
+    margin-top: 10px;
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    line-height: 1.5;
+  }
+  .copy-btn {
+    margin-top: 8px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: #2e2e2e;
+    color: var(--text);
+    font-size: 0.75rem;
+    cursor: pointer;
+  }
+
+  .loading-msg {
+    text-align: center;
+    color: var(--text-dim);
+    padding: 40px 20px;
+    font-size: 0.9rem;
+  }
+  .spinner {
+    width: 24px; height: 24px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    margin: 0 auto 12px;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .reset-link {
+    display: block;
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 0.78rem;
+    margin-top: 18px;
+    cursor: pointer;
+    text-decoration: underline;
+    background: none;
+    border: none;
+    padding: 0;
+    font-family: inherit;
+  }
+
+  .cube-counter {
+    display: inline-block;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--accent-text);
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 6px;
+    margin-bottom: 16px;
+  }
+
+  .secondary-btn {
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: #2e2e2e;
+    color: var(--text);
+    font-size: 0.8rem;
+    cursor: pointer;
+    margin-bottom: 12px;
+  }
+  .secondary-btn:active { transform: scale(0.98); }
+
+  .bottom-actions {
+    margin-top: 14px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+  .bottom-actions .secondary-btn {
+    width: 100%;
+    padding: 12px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    background: #182218;
+    border-color: #3d5a3d;
+    color: var(--success);
+    margin-bottom: 0;
+  }
+
+  .panel-desc code {
+    background: #111;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 0.78rem;
+  }
+
+  .bulk-swatch { width: 10px; height: 10px; border-radius: 1px; }
+  .bulk-swatch.bulk-center { box-shadow: inset 0 0 0 1px rgba(255,255,255,0.4); }
+
+  textarea.pattern-input {
+    font-family: 'SF Mono', Consolas, monospace;
+    resize: vertical;
+    min-height: 84px;
+    line-height: 1.5;
+  }
+  .matcher-row { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+  .matcher-row label { font-size: 0.8rem; color: var(--text-dim); }
+  .matcher-row input[type="number"] {
+    width: 70px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: #1c1a17;
+    color: var(--text);
+    font-size: 0.9rem;
+  }
+  .matcher-row input[type="number"]:focus:not(:focus-visible) { outline: none; }
+  .matcher-row input[type="number"]:focus { border-color: var(--accent); }
+  .match-summary {
+    display: flex;
+    gap: 10px;
+    margin: 10px 0 14px;
+    flex-wrap: wrap;
+  }
+  .match-stat {
+    flex: 1;
+    min-width: 90px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    text-align: center;
+  }
+  .match-stat .num { font-size: 1.4rem; font-weight: 700; line-height: 1.1; font-family: 'JetBrains Mono', 'SF Mono', monospace; }
+  .match-stat .lbl { font-size: 0.68rem; color: var(--text-dim); margin-top: 2px; }
+  .match-stat.free .num { color: var(--success); }
+  .match-stat.remaining .num { color: var(--accent-text); }
+  .match-stat:not(.free):not(.remaining) .num { color: var(--free); }
+  .match-list { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+  .match-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 11px;
+    border-radius: 8px;
+    background: #1e2a1e;
+    border: 1px solid #2d4a2d;
+    font-size: 0.8rem;
+  }
+  .match-item .match-badge {
+    background: var(--success);
+    color: #000;
+    font-weight: 700;
+    font-size: 0.68rem;
+    padding: 2px 7px;
+    border-radius: 5px;
+    flex-shrink: 0;
+  }
+  .match-item .match-detail { color: var(--text-dim); flex: 1; line-height: 1.4; }
+  .match-item .match-detail strong { color: var(--text); font-weight: 600; }
+  .pool-tag {
+    display: inline-block;
+    font-size: 0.68rem;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: #2b2823;
+    color: var(--text-dim);
+    margin-left: 4px;
+  }
+  .match-item.solve-item { background: #1e2430; border-color: #2d3d4a; }
+  .match-item .match-badge.badge-solve { background: var(--accent); }
+
+  .source-cards { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+  .source-card {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+    cursor: pointer;
+    background: #1c1a17;
+  }
+  .source-card.active { border-color: var(--accent); background: #1a2030; }
+  .source-card .source-card-title {
+    font-size: 0.85rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .source-card .source-card-title input[type="radio"] { accent-color: var(--accent); }
+  .source-type-options { display: flex; flex-wrap: wrap; gap: 14px; }
+  .source-type-option { display: flex; align-items: center; gap: 6px; font-weight: 600; cursor: pointer; }
+  .source-type-option input[type="radio"] { accent-color: var(--accent); margin: 0; cursor: pointer; }
+  .source-type-option input[type="radio"]:disabled { cursor: not-allowed; }
+  .source-type-option:has(input:disabled) { opacity: 0.45; cursor: not-allowed; }
+  .source-type-option em { font-style: normal; font-weight: 400; opacity: 0.8; }
+  .source-card .source-card-body { margin-top: 8px; padding-left: 24px; }
+  .source-card .source-card-body.disabled { opacity: 0.4; pointer-events: none; }
+
+  select.pattern-input {
+    width: 100%;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: #1c1a17;
+    color: var(--text);
+    font-size: 0.9rem;
+    margin-bottom: 8px;
+  }
+  select.pattern-input:focus:not(:focus-visible) { outline: none; }
+  select.pattern-input:focus { border-color: var(--accent); }
+
+  .plan-summary {
+    display: flex;
+    gap: 10px;
+    margin: 14px 0;
+    flex-wrap: wrap;
+  }
+  .submit-btn-row { display: flex; gap: 8px; }
+  .submit-btn-row button.primary { margin-top: 0; }
+  .cube-viewer-trigger {
+    background: var(--accent);
+    color: #1a1209;
+    font-weight: 600;
+  }
+  .cube-viewer-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+  }
+  .cube-viewer-modal {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    width: 100%;
+    max-width: 480px;
+    max-height: 95vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .cube-viewer-modal:focus { outline: none; }
+  .cube-viewer-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding: 14px 16px 10px;
+    flex-shrink: 0;
+  }
+  .cube-viewer-header h3 { margin: 0; font-size: 0.95rem; font-weight: 600; }
+  .cube-viewer-close {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-size: 1.3rem;
+    cursor: pointer;
+    line-height: 1;
+    padding: 4px 8px;
+  }
+  .cube-viewer-canvas-wrap {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    flex-shrink: 0;
+    background: #0d0d0d;
+    touch-action: none;
+  }
+  .cube-viewer-canvas-wrap canvas { display: block; width: 100%; height: 100%; }
+  .cube-viewer-minimap {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 0 16px 10px;
+    flex-shrink: 0;
+  }
+  .cube-viewer-minimap-closeup {
+    display: grid;
+    gap: 1px;
+    background: #000;
+    padding: 3px;
+    border-radius: 5px;
+    flex-shrink: 0;
+  }
+  .cube-viewer-minimap-cell {
+    width: 18px;
+    height: 18px;
+    border-radius: 2px;
+  }
+  .cube-viewer-minimap-cell.current {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+    position: relative;
+    z-index: 1;
+  }
+  .cube-viewer-minimap-cell.empty { background: #1c1a17; }
+  .cube-viewer-minimap-thumb-wrap { flex-shrink: 0; }
+  .cube-viewer-minimap-thumb {
+    position: relative;
+    background: #000;
+    padding: 3px;
+    border-radius: 5px;
+    line-height: 0;
+  }
+  .cube-viewer-minimap-thumb canvas { display: block; }
+  .cube-viewer-minimap-marker {
+    position: absolute;
+    width: 5px;
+    height: 5px;
+    background: var(--accent);
+    border-radius: 50%;
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.6);
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+  }
+  .cube-viewer-minimap-label {
+    font-size: 0.65rem;
+    color: var(--text-dim);
+    margin-top: 4px;
+    text-align: center;
+  }
+  .cube-viewer-step-label {
+    text-align: center;
+    padding: 10px 16px 4px;
+    font-size: 0.85rem;
+    color: var(--text-dim);
+  }
+  .cube-viewer-step-label strong { color: var(--accent-text); font-size: 1.1rem; }
+  .cube-viewer-moves-strip {
+    display: flex;
+    gap: 4px;
+    padding: 6px 16px;
+    overflow-x: auto;
+    flex-shrink: 0;
+  }
+  .cube-viewer-move-chip {
+    flex-shrink: 0;
+    font-family: 'SF Mono', Monaco, monospace;
+    font-size: 0.85rem;
+    padding: 4px 9px;
+    border-radius: 6px;
+    background: #1c1a17;
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+  }
+  .cube-viewer-move-chip.current { background: var(--accent); color: #1a1209; border-color: var(--accent); font-weight: 700; }
+  .cube-viewer-move-chip.done { opacity: 0.5; }
+  .cube-viewer-controls {
+    display: flex;
+    gap: 8px;
+    padding: 12px 16px 16px;
+    flex-shrink: 0;
+  }
+  .cube-viewer-controls button {
+    flex: 1;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: #2e2e2e;
+    color: var(--text);
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+  .cube-viewer-controls button:disabled { opacity: 0.35; cursor: not-allowed; }
+  .cube-viewer-controls button.play-btn { background: var(--accent); color: #1a1209; font-weight: 600; border-color: var(--accent); }
+  .cube-viewer-hint { text-align: center; font-size: 0.7rem; color: var(--text-dim); padding: 0 16px 12px; }
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.128.0/three.min.js"></script>
+</head>
+<body>
+<div class="container" id="app">
+  <div class="loading-msg" id="loadingMsg">
+    <div class="spinner"></div>
+    Loading solver engine…
+  </div>
+</div>
+
+<script>
+(function() {
+  // Centers
+  var B, BL, BR, Cube, D, DB, DBL, DF, DFR, DL, DLF, DR, DRB, F, FL, FR, L, R, U, UB, UBR, UF, UFL, UL, ULB, UR, URF, centerColor, centerFacelet, cornerColor, cornerFacelet, edgeColor, edgeFacelet;
+
+  [U, R, F, D, L, B] = [0, 1, 2, 3, 4, 5];
+
+  // Corners
+  [URF, UFL, ULB, UBR, DFR, DLF, DBL, DRB] = [0, 1, 2, 3, 4, 5, 6, 7];
+
+  // Edges
+  [UR, UF, UL, UB, DR, DF, DL, DB, FR, FL, BL, BR] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+
+  [centerFacelet, cornerFacelet, edgeFacelet] = (function() {
+    var _B, _D, _F, _L, _R, _U;
+    _U = function(x) {
+      return x - 1;
+    };
+    _R = function(x) {
+      return _U(9) + x;
+    };
+    _F = function(x) {
+      return _R(9) + x;
+    };
+    _D = function(x) {
+      return _F(9) + x;
+    };
+    _L = function(x) {
+      return _D(9) + x;
+    };
+    _B = function(x) {
+      return _L(9) + x;
+    };
+    return [
+      // Centers
+      [4,
+      13,
+      22,
+      31,
+      40,
+      49],
+      // Corners
+      [[_U(9),
+      _R(1),
+      _F(3)],
+      [_U(7),
+      _F(1),
+      _L(3)],
+      [_U(1),
+      _L(1),
+      _B(3)],
+      [_U(3),
+      _B(1),
+      _R(3)],
+      [_D(3),
+      _F(9),
+      _R(7)],
+      [_D(1),
+      _L(9),
+      _F(7)],
+      [_D(7),
+      _B(9),
+      _L(7)],
+      [_D(9),
+      _R(9),
+      _B(7)]],
+      // Edges
+      [[_U(6),
+      _R(2)],
+      [_U(8),
+      _F(2)],
+      [_U(4),
+      _L(2)],
+      [_U(2),
+      _B(2)],
+      [_D(6),
+      _R(8)],
+      [_D(2),
+      _F(8)],
+      [_D(4),
+      _L(8)],
+      [_D(8),
+      _B(8)],
+      [_F(6),
+      _R(4)],
+      [_F(4),
+      _L(6)],
+      [_B(6),
+      _L(4)],
+      [_B(4),
+      _R(6)]]
+    ];
+  })();
+
+  centerColor = ['U', 'R', 'F', 'D', 'L', 'B'];
+
+  cornerColor = [['U', 'R', 'F'], ['U', 'F', 'L'], ['U', 'L', 'B'], ['U', 'B', 'R'], ['D', 'F', 'R'], ['D', 'L', 'F'], ['D', 'B', 'L'], ['D', 'R', 'B']];
+
+  edgeColor = [['U', 'R'], ['U', 'F'], ['U', 'L'], ['U', 'B'], ['D', 'R'], ['D', 'F'], ['D', 'L'], ['D', 'B'], ['F', 'R'], ['F', 'L'], ['B', 'L'], ['B', 'R']];
+
+  Cube = (function() {
+    var faceNames, faceNums, parseAlg;
+
+    class Cube {
+      constructor(other) {
+        var x;
+        if (other != null) {
+          this.init(other);
+        } else {
+          this.identity();
+        }
+        // For moves to avoid allocating new objects each time
+        this.newCenter = (function() {
+          var k, results;
+          results = [];
+          for (x = k = 0; k <= 5; x = ++k) {
+            results.push(0);
+          }
+          return results;
+        })();
+        this.newCp = (function() {
+          var k, results;
+          results = [];
+          for (x = k = 0; k <= 7; x = ++k) {
+            results.push(0);
+          }
+          return results;
+        })();
+        this.newEp = (function() {
+          var k, results;
+          results = [];
+          for (x = k = 0; k <= 11; x = ++k) {
+            results.push(0);
+          }
+          return results;
+        })();
+        this.newCo = (function() {
+          var k, results;
+          results = [];
+          for (x = k = 0; k <= 7; x = ++k) {
+            results.push(0);
+          }
+          return results;
+        })();
+        this.newEo = (function() {
+          var k, results;
+          results = [];
+          for (x = k = 0; k <= 11; x = ++k) {
+            results.push(0);
+          }
+          return results;
+        })();
+      }
+
+      init(state) {
+        this.center = state.center.slice(0);
+        this.co = state.co.slice(0);
+        this.ep = state.ep.slice(0);
+        this.cp = state.cp.slice(0);
+        return this.eo = state.eo.slice(0);
+      }
+
+      identity() {
+        var x;
+        // Initialize to the identity cube
+        this.center = [0, 1, 2, 3, 4, 5];
+        this.cp = [0, 1, 2, 3, 4, 5, 6, 7];
+        this.co = (function() {
+          var k, results;
+          results = [];
+          for (x = k = 0; k <= 7; x = ++k) {
+            results.push(0);
+          }
+          return results;
+        })();
+        this.ep = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+        return this.eo = (function() {
+          var k, results;
+          results = [];
+          for (x = k = 0; k <= 11; x = ++k) {
+            results.push(0);
+          }
+          return results;
+        })();
+      }
+
+      toJSON() {
+        return {
+          center: this.center,
+          cp: this.cp,
+          co: this.co,
+          ep: this.ep,
+          eo: this.eo
+        };
+      }
+
+      asString() {
+        var corner, edge, i, k, l, m, n, o, ori, p, result;
+        result = [];
+        for (i = k = 0; k <= 5; i = ++k) {
+          result[9 * i + 4] = centerColor[this.center[i]];
+        }
+        for (i = l = 0; l <= 7; i = ++l) {
+          corner = this.cp[i];
+          ori = this.co[i];
+          for (n = m = 0; m <= 2; n = ++m) {
+            result[cornerFacelet[i][(n + ori) % 3]] = cornerColor[corner][n];
+          }
+        }
+        for (i = o = 0; o <= 11; i = ++o) {
+          edge = this.ep[i];
+          ori = this.eo[i];
+          for (n = p = 0; p <= 1; n = ++p) {
+            result[edgeFacelet[i][(n + ori) % 2]] = edgeColor[edge][n];
+          }
+        }
+        return result.join('');
+      }
+
+      static fromString(str) {
+        var col1, col2, cube, i, j, k, l, m, o, ori, p, q, r, ref;
+        cube = new Cube;
+        for (i = k = 0; k <= 5; i = ++k) {
+          for (j = l = 0; l <= 5; j = ++l) {
+            if (str[9 * i + 4] === centerColor[j]) {
+              cube.center[i] = j;
+            }
+          }
+        }
+        for (i = m = 0; m <= 7; i = ++m) {
+          for (ori = o = 0; o <= 2; ori = ++o) {
+            if ((ref = str[cornerFacelet[i][ori]]) === 'U' || ref === 'D') {
+              break;
+            }
+          }
+          col1 = str[cornerFacelet[i][(ori + 1) % 3]];
+          col2 = str[cornerFacelet[i][(ori + 2) % 3]];
+          for (j = p = 0; p <= 7; j = ++p) {
+            if (col1 === cornerColor[j][1] && col2 === cornerColor[j][2]) {
+              cube.cp[i] = j;
+              cube.co[i] = ori % 3;
+            }
+          }
+        }
+        for (i = q = 0; q <= 11; i = ++q) {
+          for (j = r = 0; r <= 11; j = ++r) {
+            if (str[edgeFacelet[i][0]] === edgeColor[j][0] && str[edgeFacelet[i][1]] === edgeColor[j][1]) {
+              cube.ep[i] = j;
+              cube.eo[i] = 0;
+              break;
+            }
+            if (str[edgeFacelet[i][0]] === edgeColor[j][1] && str[edgeFacelet[i][1]] === edgeColor[j][0]) {
+              cube.ep[i] = j;
+              cube.eo[i] = 1;
+              break;
+            }
+          }
+        }
+        return cube;
+      }
+
+      clone() {
+        return new Cube(this.toJSON());
+      }
+
+      // A class method returning a new random cube
+      static random() {
+        return new Cube().randomize();
+      }
+
+      isSolved() {
+        var c, cent, clone, e, k, l, m;
+        clone = this.clone();
+        clone.move(clone.upright());
+        for (cent = k = 0; k <= 5; cent = ++k) {
+          if (clone.center[cent] !== cent) {
+            return false;
+          }
+        }
+        for (c = l = 0; l <= 7; c = ++l) {
+          if (clone.cp[c] !== c) {
+            return false;
+          }
+          if (clone.co[c] !== 0) {
+            return false;
+          }
+        }
+        for (e = m = 0; m <= 11; e = ++m) {
+          if (clone.ep[e] !== e) {
+            return false;
+          }
+          if (clone.eo[e] !== 0) {
+            return false;
+          }
+        }
+        return true;
+      }
+
+      // Multiply this Cube with another Cube, restricted to centers.
+      centerMultiply(other) {
+        var from, k, to;
+        for (to = k = 0; k <= 5; to = ++k) {
+          from = other.center[to];
+          this.newCenter[to] = this.center[from];
+        }
+        [this.center, this.newCenter] = [this.newCenter, this.center];
+        return this;
+      }
+
+      // Multiply this Cube with another Cube, restricted to corners.
+      cornerMultiply(other) {
+        var from, k, to;
+        for (to = k = 0; k <= 7; to = ++k) {
+          from = other.cp[to];
+          this.newCp[to] = this.cp[from];
+          this.newCo[to] = (this.co[from] + other.co[to]) % 3;
+        }
+        [this.cp, this.newCp] = [this.newCp, this.cp];
+        [this.co, this.newCo] = [this.newCo, this.co];
+        return this;
+      }
+
+      // Multiply this Cube with another Cube, restricted to edges
+      edgeMultiply(other) {
+        var from, k, to;
+        for (to = k = 0; k <= 11; to = ++k) {
+          from = other.ep[to];
+          this.newEp[to] = this.ep[from];
+          this.newEo[to] = (this.eo[from] + other.eo[to]) % 2;
+        }
+        [this.ep, this.newEp] = [this.newEp, this.ep];
+        [this.eo, this.newEo] = [this.newEo, this.eo];
+        return this;
+      }
+
+      // Multiply this cube with another Cube
+      multiply(other) {
+        this.centerMultiply(other);
+        this.cornerMultiply(other);
+        this.edgeMultiply(other);
+        return this;
+      }
+
+      move(arg) {
+        var face, k, l, len, move, power, ref, ref1, x;
+        ref = parseAlg(arg);
+        for (k = 0, len = ref.length; k < len; k++) {
+          move = ref[k];
+          face = move / 3 | 0;
+          power = move % 3;
+          for (x = l = 0, ref1 = power; (0 <= ref1 ? l <= ref1 : l >= ref1); x = 0 <= ref1 ? ++l : --l) {
+            this.multiply(Cube.moves[face]);
+          }
+        }
+        return this;
+      }
+
+      upright() {
+        var clone, i, j, k, l, result;
+        clone = this.clone();
+        result = [];
+        for (i = k = 0; k <= 5; i = ++k) {
+          if (clone.center[i] === F) {
+            break;
+          }
+        }
+        switch (i) {
+          case D:
+            result.push("x");
+            break;
+          case U:
+            result.push("x'");
+            break;
+          case B:
+            result.push("x2");
+            break;
+          case R:
+            result.push("y");
+            break;
+          case L:
+            result.push("y'");
+        }
+        if (result.length) {
+          clone.move(result[0]);
+        }
+        for (j = l = 0; l <= 5; j = ++l) {
+          if (clone.center[j] === U) {
+            break;
+          }
+        }
+        switch (j) {
+          case L:
+            result.push("z");
+            break;
+          case R:
+            result.push("z'");
+            break;
+          case D:
+            result.push("z2");
+        }
+        return result.join(' ');
+      }
+
+      static inverse(arg) {
+        var face, k, len, move, power, result, str;
+        result = (function() {
+          var k, len, ref, results;
+          ref = parseAlg(arg);
+          results = [];
+          for (k = 0, len = ref.length; k < len; k++) {
+            move = ref[k];
+            face = move / 3 | 0;
+            power = move % 3;
+            results.push(face * 3 + -(power - 1) + 1);
+          }
+          return results;
+        })();
+        result.reverse();
+        if (typeof arg === 'string') {
+          str = '';
+          for (k = 0, len = result.length; k < len; k++) {
+            move = result[k];
+            face = move / 3 | 0;
+            power = move % 3;
+            str += faceNames[face];
+            if (power === 1) {
+              str += '2';
+            } else if (power === 2) {
+              str += "'";
+            }
+            str += ' ';
+          }
+          return str.substring(0, str.length - 1);
+        } else if (arg.length != null) {
+          return result;
+        } else {
+          return result[0];
+        }
+      }
+
+    };
+
+    Cube.prototype.randomize = (function() {
+      var arePermutationsValid, generateValidRandomOrientation, generateValidRandomPermutation, getNumSwaps, isOrientationValid, randint, randomizeOrientation, result, shuffle;
+      randint = function(min, max) {
+        return min + Math.floor(Math.random() * (max - min + 1));
+      };
+      // Fisher-Yates shuffle adapted from https://stackoverflow.com/questions/2450954/how-to-randomize-shuffle-a-javascript-array
+      shuffle = function(array) {
+        var currentIndex, randomIndex, temporaryValue;
+        currentIndex = array.length;
+        // While there remain elements to shuffle...
+        while (currentIndex !== 0) {
+          // Pick a remaining element...
+          randomIndex = randint(0, currentIndex - 1);
+          currentIndex -= 1;
+          // And swap it with the current element.
+          temporaryValue = array[currentIndex];
+          [array[currentIndex], array[randomIndex]] = [array[randomIndex], array[currentIndex]];
+        }
+      };
+      getNumSwaps = function(arr) {
+        var cur, cycleLength, i, k, numSwaps, ref, seen, x;
+        numSwaps = 0;
+        seen = (function() {
+          var k, ref, results;
+          results = [];
+          for (x = k = 0, ref = arr.length - 1; (0 <= ref ? k <= ref : k >= ref); x = 0 <= ref ? ++k : --k) {
+            results.push(false);
+          }
+          return results;
+        })();
+        while (true) {
+          // We compute the cycle decomposition
+          cur = -1;
+          for (i = k = 0, ref = arr.length - 1; (0 <= ref ? k <= ref : k >= ref); i = 0 <= ref ? ++k : --k) {
+            if (!seen[i]) {
+              cur = i;
+              break;
+            }
+          }
+          if (cur === -1) {
+            break;
+          }
+          cycleLength = 0;
+          while (!seen[cur]) {
+            seen[cur] = true;
+            cycleLength++;
+            cur = arr[cur];
+          }
+          // A cycle is equivalent to cycleLength + 1 swaps
+          numSwaps += cycleLength + 1;
+        }
+        return numSwaps;
+      };
+      arePermutationsValid = function(cp, ep) {
+        var numSwaps;
+        numSwaps = getNumSwaps(ep) + getNumSwaps(cp);
+        return numSwaps % 2 === 0;
+      };
+      generateValidRandomPermutation = function(cp, ep) {
+        // Each shuffle only takes around 12 operations and there's a 50%
+        // chance of a valid permutation so it'll finish in very good time
+        shuffle(ep);
+        shuffle(cp);
+        while (!arePermutationsValid(cp, ep)) {
+          shuffle(ep);
+          shuffle(cp);
+        }
+      };
+      randomizeOrientation = function(arr, numOrientations) {
+        var i, k, ori, ref;
+        ori = 0;
+        for (i = k = 0, ref = arr.length - 1; (0 <= ref ? k <= ref : k >= ref); i = 0 <= ref ? ++k : --k) {
+          ori += (arr[i] = randint(0, numOrientations - 1));
+        }
+      };
+      isOrientationValid = function(arr, numOrientations) {
+        return arr.reduce(function(a, b) {
+          return a + b;
+        }) % numOrientations === 0;
+      };
+      generateValidRandomOrientation = function(co, eo) {
+        // There is a 1/2 and 1/3 probably respectively of each of these
+        // succeeding so the probability of them running 10 times before
+        // success is already only 1% and only gets exponentially lower
+        // and each generation is only in the 10s of operations which is nothing
+        randomizeOrientation(co, 3);
+        while (!isOrientationValid(co, 3)) {
+          randomizeOrientation(co, 3);
+        }
+        randomizeOrientation(eo, 2);
+        while (!isOrientationValid(eo, 2)) {
+          randomizeOrientation(eo, 2);
+        }
+      };
+      result = function() {
+        generateValidRandomPermutation(this.cp, this.ep);
+        generateValidRandomOrientation(this.co, this.eo);
+        return this;
+      };
+      return result;
+    })();
+
+    Cube.moves = [
+      {
+        // U
+        center: [0, 1, 2, 3, 4, 5],
+        cp: [UBR,
+      URF,
+      UFL,
+      ULB,
+      DFR,
+      DLF,
+      DBL,
+      DRB],
+        co: [0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0],
+        ep: [UB,
+      UR,
+      UF,
+      UL,
+      DR,
+      DF,
+      DL,
+      DB,
+      FR,
+      FL,
+      BL,
+      BR],
+        eo: [0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0]
+      },
+      {
+        // R
+        center: [0, 1, 2, 3, 4, 5],
+        cp: [DFR,
+      UFL,
+      ULB,
+      URF,
+      DRB,
+      DLF,
+      DBL,
+      UBR],
+        co: [2,
+      0,
+      0,
+      1,
+      1,
+      0,
+      0,
+      2],
+        ep: [FR,
+      UF,
+      UL,
+      UB,
+      BR,
+      DF,
+      DL,
+      DB,
+      DR,
+      FL,
+      BL,
+      UR],
+        eo: [0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0]
+      },
+      {
+        // F
+        center: [0, 1, 2, 3, 4, 5],
+        cp: [UFL,
+      DLF,
+      ULB,
+      UBR,
+      URF,
+      DFR,
+      DBL,
+      DRB],
+        co: [1,
+      2,
+      0,
+      0,
+      2,
+      1,
+      0,
+      0],
+        ep: [UR,
+      FL,
+      UL,
+      UB,
+      DR,
+      FR,
+      DL,
+      DB,
+      UF,
+      DF,
+      BL,
+      BR],
+        eo: [0,
+      1,
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      1,
+      1,
+      0,
+      0]
+      },
+      {
+        // D
+        center: [0, 1, 2, 3, 4, 5],
+        cp: [URF,
+      UFL,
+      ULB,
+      UBR,
+      DLF,
+      DBL,
+      DRB,
+      DFR],
+        co: [0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0],
+        ep: [UR,
+      UF,
+      UL,
+      UB,
+      DF,
+      DL,
+      DB,
+      DR,
+      FR,
+      FL,
+      BL,
+      BR],
+        eo: [0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0]
+      },
+      {
+        // L
+        center: [0, 1, 2, 3, 4, 5],
+        cp: [URF,
+      ULB,
+      DBL,
+      UBR,
+      DFR,
+      UFL,
+      DLF,
+      DRB],
+        co: [0,
+      1,
+      2,
+      0,
+      0,
+      2,
+      1,
+      0],
+        ep: [UR,
+      UF,
+      BL,
+      UB,
+      DR,
+      DF,
+      FL,
+      DB,
+      FR,
+      UL,
+      DL,
+      BR],
+        eo: [0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0]
+      },
+      {
+        // B
+        center: [0, 1, 2, 3, 4, 5],
+        cp: [URF,
+      UFL,
+      UBR,
+      DRB,
+      DFR,
+      DLF,
+      ULB,
+      DBL],
+        co: [0,
+      0,
+      1,
+      2,
+      0,
+      0,
+      2,
+      1],
+        ep: [UR,
+      UF,
+      UL,
+      BR,
+      DR,
+      DF,
+      DL,
+      BL,
+      FR,
+      FL,
+      UB,
+      DB],
+        eo: [0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      1,
+      1]
+      },
+      {
+        // E
+        center: [U,
+      F,
+      L,
+      D,
+      B,
+      R],
+        cp: [URF,
+      UFL,
+      ULB,
+      UBR,
+      DFR,
+      DLF,
+      DBL,
+      DRB],
+        co: [0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0],
+        ep: [UR,
+      UF,
+      UL,
+      UB,
+      DR,
+      DF,
+      DL,
+      DB,
+      FL,
+      BL,
+      BR,
+      FR],
+        eo: [0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      1,
+      1,
+      1]
+      },
+      {
+        // M
+        center: [B,
+      R,
+      U,
+      F,
+      L,
+      D],
+        cp: [URF,
+      UFL,
+      ULB,
+      UBR,
+      DFR,
+      DLF,
+      DBL,
+      DRB],
+        co: [0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0],
+        ep: [UR,
+      UB,
+      UL,
+      DB,
+      DR,
+      UF,
+      DL,
+      DF,
+      FR,
+      FL,
+      BL,
+      BR],
+        eo: [0,
+      1,
+      0,
+      1,
+      0,
+      1,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0]
+      },
+      {
+        // S
+        center: [L,
+      U,
+      F,
+      R,
+      D,
+      B],
+        cp: [URF,
+      UFL,
+      ULB,
+      UBR,
+      DFR,
+      DLF,
+      DBL,
+      DRB],
+        co: [0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0],
+        ep: [UL,
+      UF,
+      DL,
+      UB,
+      UR,
+      DF,
+      DR,
+      DB,
+      FR,
+      FL,
+      BL,
+      BR],
+        eo: [1,
+      0,
+      1,
+      0,
+      1,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0]
+      }
+    ];
+
+    faceNums = {
+      U: 0,
+      R: 1,
+      F: 2,
+      D: 3,
+      L: 4,
+      B: 5,
+      E: 6,
+      M: 7,
+      S: 8,
+      x: 9,
+      y: 10,
+      z: 11,
+      u: 12,
+      r: 13,
+      f: 14,
+      d: 15,
+      l: 16,
+      b: 17
+    };
+
+    faceNames = {
+      0: 'U',
+      1: 'R',
+      2: 'F',
+      3: 'D',
+      4: 'L',
+      5: 'B',
+      6: 'E',
+      7: 'M',
+      8: 'S',
+      9: 'x',
+      10: 'y',
+      11: 'z',
+      12: 'u',
+      13: 'r',
+      14: 'f',
+      15: 'd',
+      16: 'l',
+      17: 'b'
+    };
+
+    parseAlg = function(arg) {
+      var k, len, move, part, power, ref, results;
+      if (typeof arg === 'string') {
+        ref = arg.split(/\s+/);
+        // String
+        results = [];
+        for (k = 0, len = ref.length; k < len; k++) {
+          part = ref[k];
+          if (part.length === 0) {
+            // First and last can be empty
+            continue;
+          }
+          if (part.length > 2) {
+            throw new Error(`Invalid move: ${part}`);
+          }
+          move = faceNums[part[0]];
+          if (move === void 0) {
+            throw new Error(`Invalid move: ${part}`);
+          }
+          if (part.length === 1) {
+            power = 0;
+          } else {
+            if (part[1] === '2') {
+              power = 1;
+            } else if (part[1] === "'") {
+              power = 2;
+            } else {
+              throw new Error(`Invalid move: ${part}`);
+            }
+          }
+          results.push(move * 3 + power);
+        }
+        return results;
+      } else if (arg.length != null) {
+        // Already an array
+        return arg;
+      } else {
+        // A single move
+        return [arg];
+      }
+    };
+
+    // x
+    Cube.moves.push(new Cube().move("R M' L'").toJSON());
+
+    // y
+    Cube.moves.push(new Cube().move("U E' D'").toJSON());
+
+    // z
+    Cube.moves.push(new Cube().move("F S B'").toJSON());
+
+    // u
+    Cube.moves.push(new Cube().move("U E'").toJSON());
+
+    // r
+    Cube.moves.push(new Cube().move("R M'").toJSON());
+
+    // f
+    Cube.moves.push(new Cube().move("F S").toJSON());
+
+    // d
+    Cube.moves.push(new Cube().move("D E").toJSON());
+
+    // l
+    Cube.moves.push(new Cube().move("L M").toJSON());
+
+    // b
+    Cube.moves.push(new Cube().move("B S'").toJSON());
+
+    return Cube;
+
+  }).call(this);
+
+  //# Globals
+  if (typeof module !== "undefined" && module !== null) {
+    module.exports = Cube;
+  } else {
+    this.Cube = Cube;
+  }
+
+}).call(this);
+(function() {
+  var B, BL, BR, Cnk, Cube, D, DB, DBL, DF, DFR, DL, DLF, DR, DRB, F, FL, FR, Include, L, N_FLIP, N_FRtoBR, N_PARITY, N_SLICE1, N_SLICE2, N_TWIST, N_UBtoDF, N_URFtoDLF, N_URtoDF, N_URtoUL, R, U, UB, UBR, UF, UFL, UL, ULB, UR, URF, allMoves1, allMoves2, computeMoveTable, computePruningTable, faceNames, faceNums, factorial, key, max, mergeURtoDF, moveTableParams, nextMoves1, nextMoves2, permutationIndex, pruning, pruningTableParams, rotateLeft, rotateRight, value,
+    indexOf = [].indexOf;
+
+  Cube = this.Cube || require('./cube');
+
+  // Centers
+  [U, R, F, D, L, B] = [0, 1, 2, 3, 4, 5];
+
+  // Corners
+  [URF, UFL, ULB, UBR, DFR, DLF, DBL, DRB] = [0, 1, 2, 3, 4, 5, 6, 7];
+
+  // Edges
+  [UR, UF, UL, UB, DR, DF, DL, DB, FR, FL, BL, BR] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+
+  //# Helpers
+
+  // n choose k, i.e. the binomial coeffiecient
+  Cnk = function(n, k) {
+    var i, j, s;
+    if (n < k) {
+      return 0;
+    }
+    if (k > n / 2) {
+      k = n - k;
+    }
+    s = 1;
+    i = n;
+    j = 1;
+    while (i !== n - k) {
+      s *= i;
+      s /= j;
+      i--;
+      j++;
+    }
+    return s;
+  };
+
+  // n!
+  factorial = function(n) {
+    var f, i, m, ref;
+    f = 1;
+    for (i = m = 2, ref = n; (2 <= ref ? m <= ref : m >= ref); i = 2 <= ref ? ++m : --m) {
+      f *= i;
+    }
+    return f;
+  };
+
+  // Maximum of two values
+  max = function(a, b) {
+    if (a > b) {
+      return a;
+    } else {
+      return b;
+    }
+  };
+
+  // Rotate elements between l and r left by one place
+  rotateLeft = function(array, l, r) {
+    var i, m, ref, ref1, tmp;
+    tmp = array[l];
+    for (i = m = ref = l, ref1 = r - 1; (ref <= ref1 ? m <= ref1 : m >= ref1); i = ref <= ref1 ? ++m : --m) {
+      array[i] = array[i + 1];
+    }
+    return array[r] = tmp;
+  };
+
+  // Rotate elements between l and r right by one place
+  rotateRight = function(array, l, r) {
+    var i, m, ref, ref1, tmp;
+    tmp = array[r];
+    for (i = m = ref = r, ref1 = l + 1; (ref <= ref1 ? m <= ref1 : m >= ref1); i = ref <= ref1 ? ++m : --m) {
+      array[i] = array[i - 1];
+    }
+    return array[l] = tmp;
+  };
+
+  // Generate a function that computes permutation indices.
+
+  // The permutation index actually encodes two indices: Combination,
+  // i.e. positions of the cubies start..end (A) and their respective
+  // permutation (B). The maximum value for B is
+
+  //   maxB = (end - start + 1)!
+
+  // and the index is A * maxB + B
+  permutationIndex = function(context, start, end, fromEnd = false) {
+    var i, maxAll, maxB, maxOur, our, permName;
+    maxOur = end - start;
+    maxB = factorial(maxOur + 1);
+    if (context === 'corners') {
+      maxAll = 7;
+      permName = 'cp';
+    } else {
+      maxAll = 11;
+      permName = 'ep';
+    }
+    our = (function() {
+      var m, ref, results;
+      results = [];
+      for (i = m = 0, ref = maxOur; (0 <= ref ? m <= ref : m >= ref); i = 0 <= ref ? ++m : --m) {
+        results.push(0);
+      }
+      return results;
+    })();
+    return function(index) {
+      var a, b, c, j, k, m, o, p, perm, q, ref, ref1, ref10, ref2, ref3, ref4, ref5, ref6, ref7, ref8, ref9, t, u, w, x, y, z;
+      if (index != null) {
+        for (i = m = 0, ref = maxOur; (0 <= ref ? m <= ref : m >= ref); i = 0 <= ref ? ++m : --m) {
+          // Reset our to [start..end]
+          our[i] = i + start;
+        }
+        b = index % maxB; // permutation
+        a = index / maxB | 0; // combination
+        
+        // Invalidate all edges
+        perm = this[permName];
+        for (i = o = 0, ref1 = maxAll; (0 <= ref1 ? o <= ref1 : o >= ref1); i = 0 <= ref1 ? ++o : --o) {
+          perm[i] = -1;
+        }
+// Generate permutation from index b
+        for (j = p = 1, ref2 = maxOur; (1 <= ref2 ? p <= ref2 : p >= ref2); j = 1 <= ref2 ? ++p : --p) {
+          k = b % (j + 1);
+          b = b / (j + 1) | 0;
+          // TODO: Implement rotateRightBy(our, 0, j, k)
+          while (k > 0) {
+            rotateRight(our, 0, j);
+            k--;
+          }
+        }
+        // Generate combination and set our edges
+        x = maxOur;
+        if (fromEnd) {
+          for (j = q = 0, ref3 = maxAll; (0 <= ref3 ? q <= ref3 : q >= ref3); j = 0 <= ref3 ? ++q : --q) {
+            c = Cnk(maxAll - j, x + 1);
+            if (a - c >= 0) {
+              perm[j] = our[maxOur - x];
+              a -= c;
+              x--;
+            }
+          }
+        } else {
+          for (j = t = ref4 = maxAll; (ref4 <= 0 ? t <= 0 : t >= 0); j = ref4 <= 0 ? ++t : --t) {
+            c = Cnk(j, x + 1);
+            if (a - c >= 0) {
+              perm[j] = our[x];
+              a -= c;
+              x--;
+            }
+          }
+        }
+        return this;
+      } else {
+        perm = this[permName];
+        for (i = u = 0, ref5 = maxOur; (0 <= ref5 ? u <= ref5 : u >= ref5); i = 0 <= ref5 ? ++u : --u) {
+          our[i] = -1;
+        }
+        a = b = x = 0;
+        // Compute the index a < ((maxAll + 1) choose (maxOur + 1)) and
+        // the permutation
+        if (fromEnd) {
+          for (j = w = ref6 = maxAll; (ref6 <= 0 ? w <= 0 : w >= 0); j = ref6 <= 0 ? ++w : --w) {
+            if ((start <= (ref7 = perm[j]) && ref7 <= end)) {
+              a += Cnk(maxAll - j, x + 1);
+              our[maxOur - x] = perm[j];
+              x++;
+            }
+          }
+        } else {
+          for (j = y = 0, ref8 = maxAll; (0 <= ref8 ? y <= ref8 : y >= ref8); j = 0 <= ref8 ? ++y : --y) {
+            if ((start <= (ref9 = perm[j]) && ref9 <= end)) {
+              a += Cnk(j, x + 1);
+              our[x] = perm[j];
+              x++;
+            }
+          }
+        }
+// Compute the index b < (maxOur + 1)! for the permutation
+        for (j = z = ref10 = maxOur; (ref10 <= 0 ? z <= 0 : z >= 0); j = ref10 <= 0 ? ++z : --z) {
+          k = 0;
+          while (our[j] !== start + j) {
+            rotateLeft(our, 0, j);
+            k++;
+          }
+          b = (j + 1) * b + k;
+        }
+        return a * maxB + b;
+      }
+    };
+  };
+
+  Include = {
+    // The twist of the 8 corners, 0 <= twist < 3^7. The orientation of
+    // the DRB corner is fully determined by the orientation of the other
+    // corners.
+    twist: function(twist) {
+      var i, m, o, ori, parity, v;
+      if (twist != null) {
+        parity = 0;
+        for (i = m = 6; m >= 0; i = --m) {
+          ori = twist % 3;
+          twist = (twist / 3) | 0;
+          this.co[i] = ori;
+          parity += ori;
+        }
+        this.co[7] = (3 - parity % 3) % 3;
+        return this;
+      } else {
+        v = 0;
+        for (i = o = 0; o <= 6; i = ++o) {
+          v = 3 * v + this.co[i];
+        }
+        return v;
+      }
+    },
+    // The flip of the 12 edges, 0 <= flip < 2^11. The orientation of the
+    // BR edge is fully determined by the orientation of the other edges.
+    flip: function(flip) {
+      var i, m, o, ori, parity, v;
+      if (flip != null) {
+        parity = 0;
+        for (i = m = 10; m >= 0; i = --m) {
+          ori = flip % 2;
+          flip = flip / 2 | 0;
+          this.eo[i] = ori;
+          parity += ori;
+        }
+        this.eo[11] = (2 - parity % 2) % 2;
+        return this;
+      } else {
+        v = 0;
+        for (i = o = 0; o <= 10; i = ++o) {
+          v = 2 * v + this.eo[i];
+        }
+        return v;
+      }
+    },
+    // Parity of the corner permutation
+    cornerParity: function() {
+      var i, j, m, o, ref, ref1, ref2, ref3, s;
+      s = 0;
+      for (i = m = ref = DRB, ref1 = URF + 1; (ref <= ref1 ? m <= ref1 : m >= ref1); i = ref <= ref1 ? ++m : --m) {
+        for (j = o = ref2 = i - 1, ref3 = URF; (ref2 <= ref3 ? o <= ref3 : o >= ref3); j = ref2 <= ref3 ? ++o : --o) {
+          if (this.cp[j] > this.cp[i]) {
+            s++;
+          }
+        }
+      }
+      return s % 2;
+    },
+    // Parity of the edges permutation. Parity of corners and edges are
+    // the same if the cube is solvable.
+    edgeParity: function() {
+      var i, j, m, o, ref, ref1, ref2, ref3, s;
+      s = 0;
+      for (i = m = ref = BR, ref1 = UR + 1; (ref <= ref1 ? m <= ref1 : m >= ref1); i = ref <= ref1 ? ++m : --m) {
+        for (j = o = ref2 = i - 1, ref3 = UR; (ref2 <= ref3 ? o <= ref3 : o >= ref3); j = ref2 <= ref3 ? ++o : --o) {
+          if (this.ep[j] > this.ep[i]) {
+            s++;
+          }
+        }
+      }
+      return s % 2;
+    },
+    // Permutation of the six corners URF, UFL, ULB, UBR, DFR, DLF
+    URFtoDLF: permutationIndex('corners', URF, DLF),
+    // Permutation of the three edges UR, UF, UL
+    URtoUL: permutationIndex('edges', UR, UL),
+    // Permutation of the three edges UB, DR, DF
+    UBtoDF: permutationIndex('edges', UB, DF),
+    // Permutation of the six edges UR, UF, UL, UB, DR, DF
+    URtoDF: permutationIndex('edges', UR, DF),
+    // Permutation of the equator slice edges FR, FL, BL and BR
+    FRtoBR: permutationIndex('edges', FR, BR, true)
+  };
+
+  for (key in Include) {
+    value = Include[key];
+    Cube.prototype[key] = value;
+  }
+
+  computeMoveTable = function(context, coord, size) {
+    var apply, cube, i, inner, j, k, m, move, o, p, ref, results;
+    // Loop through all valid values for the coordinate, setting cube's
+    // state in each iteration. Then apply each of the 18 moves to the
+    // cube, and compute the resulting coordinate.
+    apply = context === 'corners' ? 'cornerMultiply' : 'edgeMultiply';
+    cube = new Cube;
+    results = [];
+    for (i = m = 0, ref = size - 1; (0 <= ref ? m <= ref : m >= ref); i = 0 <= ref ? ++m : --m) {
+      cube[coord](i);
+      inner = [];
+      for (j = o = 0; o <= 5; j = ++o) {
+        move = Cube.moves[j];
+        for (k = p = 0; p <= 2; k = ++p) {
+          cube[apply](move);
+          inner.push(cube[coord]());
+        }
+        // 4th face turn restores the cube
+        cube[apply](move);
+      }
+      results.push(inner);
+    }
+    return results;
+  };
+
+  // Because we only have the phase 2 URtoDF coordinates, we need to
+  // merge the URtoUL and UBtoDF coordinates to URtoDF in the beginning
+  // of phase 2.
+  mergeURtoDF = (function() {
+    var a, b;
+    a = new Cube;
+    b = new Cube;
+    return function(URtoUL, UBtoDF) {
+      var i, m;
+      // Collisions can be found because unset are set to -1
+      a.URtoUL(URtoUL);
+      b.UBtoDF(UBtoDF);
+      for (i = m = 0; m <= 7; i = ++m) {
+        if (a.ep[i] !== -1) {
+          if (b.ep[i] !== -1) {
+            return -1; // collision
+          } else {
+            b.ep[i] = a.ep[i];
+          }
+        }
+      }
+      return b.URtoDF();
+    };
+  })();
+
+  N_TWIST = 2187; // 3^7 corner orientations
+
+  N_FLIP = 2048; // 2^11 possible edge flips
+
+  N_PARITY = 2; // 2 possible parities
+
+  N_FRtoBR = 11880; // 12!/(12-4)! permutations of FR..BR edges
+
+  N_SLICE1 = 495; // (12 choose 4) possible positions of FR..BR edges
+
+  N_SLICE2 = 24; // 4! permutations of FR..BR edges in phase 2
+
+  N_URFtoDLF = 20160; // 8!/(8-6)! permutations of URF..DLF corners
+
+  
+  // The URtoDF move table is only computed for phase 2 because the full
+  // table would have >650000 entries
+  N_URtoDF = 20160; // 8!/(8-6)! permutation of UR..DF edges in phase 2
+
+  N_URtoUL = 1320; // 12!/(12-3)! permutations of UR..UL edges
+
+  N_UBtoDF = 1320; // 12!/(12-3)! permutations of UB..DF edges
+
+  
+  // The move table for parity is so small that it's included here
+  Cube.moveTables = {
+    parity: [[1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1], [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0]],
+    twist: null,
+    flip: null,
+    FRtoBR: null,
+    URFtoDLF: null,
+    URtoDF: null,
+    URtoUL: null,
+    UBtoDF: null,
+    mergeURtoDF: null
+  };
+
+  // Other move tables are computed on the fly
+  moveTableParams = {
+    // name: [scope, size]
+    twist: ['corners', N_TWIST],
+    flip: ['edges', N_FLIP],
+    FRtoBR: ['edges', N_FRtoBR],
+    URFtoDLF: ['corners', N_URFtoDLF],
+    URtoDF: ['edges', N_URtoDF],
+    URtoUL: ['edges', N_URtoUL],
+    UBtoDF: ['edges', N_UBtoDF],
+    mergeURtoDF: []
+  };
+
+  Cube.computeMoveTables = function(...tables) {
+    var len, m, name, scope, size, tableName;
+    if (tables.length === 0) {
+      tables = (function() {
+        var results;
+        results = [];
+        for (name in moveTableParams) {
+          results.push(name);
+        }
+        return results;
+      })();
+    }
+    for (m = 0, len = tables.length; m < len; m++) {
+      tableName = tables[m];
+      if (this.moveTables[tableName] !== null) {
+        // Already computed
+        continue;
+      }
+      if (tableName === 'mergeURtoDF') {
+        this.moveTables.mergeURtoDF = (function() {
+          var UBtoDF, URtoUL, o, results;
+          results = [];
+          for (URtoUL = o = 0; o <= 335; URtoUL = ++o) {
+            results.push((function() {
+              var p, results1;
+              results1 = [];
+              for (UBtoDF = p = 0; p <= 335; UBtoDF = ++p) {
+                results1.push(mergeURtoDF(URtoUL, UBtoDF));
+              }
+              return results1;
+            })());
+          }
+          return results;
+        })();
+      } else {
+        [scope, size] = moveTableParams[tableName];
+        this.moveTables[tableName] = computeMoveTable(scope, tableName, size);
+      }
+    }
+    return this;
+  };
+
+  // Phase 1: All moves are valid
+  allMoves1 = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17];
+
+  // The list of next valid phase 1 moves when the given face was turned
+  // in the last move
+  nextMoves1 = (function() {
+    var face, lastFace, m, next, o, p, power, results;
+    results = [];
+    for (lastFace = m = 0; m <= 5; lastFace = ++m) {
+      next = [];
+// Don't allow commuting moves, e.g. U U'. Also make sure that
+// opposite faces are always moved in the same order, i.e. allow
+// U D but no D U. This avoids sequences like U D U'.
+      for (face = o = 0; o <= 5; face = ++o) {
+        if (face !== lastFace && face !== lastFace - 3) {
+// single, double or inverse move
+          for (power = p = 0; p <= 2; power = ++p) {
+            next.push(face * 3 + power);
+          }
+        }
+      }
+      results.push(next);
+    }
+    return results;
+  })();
+
+  // Phase 2: Double moves of all faces plus quarter moves of U and D
+  allMoves2 = [0, 1, 2, 4, 7, 9, 10, 11, 13, 16];
+
+  nextMoves2 = (function() {
+    var face, lastFace, len, m, next, o, p, power, powers, results;
+    results = [];
+    for (lastFace = m = 0; m <= 5; lastFace = ++m) {
+      next = [];
+      for (face = o = 0; o <= 5; face = ++o) {
+        if (!(face !== lastFace && face !== lastFace - 3)) {
+          continue;
+        }
+        // Allow all moves of U and D and double moves of others
+        powers = face === 0 || face === 3 ? [0, 1, 2] : [1];
+        for (p = 0, len = powers.length; p < len; p++) {
+          power = powers[p];
+          next.push(face * 3 + power);
+        }
+      }
+      results.push(next);
+    }
+    return results;
+  })();
+
+  // 8 values are encoded in one number
+  pruning = function(table, index, value) {
+    var pos, shift, slot;
+    pos = index % 8;
+    slot = index >> 3;
+    shift = pos << 2;
+    if (value != null) {
+      // Set
+      table[slot] &= ~(0xF << shift);
+      table[slot] |= value << shift;
+      return value;
+    } else {
+      // Get
+      return (table[slot] & (0xF << shift)) >>> shift;
+    }
+  };
+
+  computePruningTable = function(phase, size, currentCoords, nextIndex) {
+    var current, depth, done, index, len, m, move, moves, next, o, ref, table, x;
+    // Initialize all values to 0xF
+    table = (function() {
+      var m, ref, results;
+      results = [];
+      for (x = m = 0, ref = Math.ceil(size / 8) - 1; (0 <= ref ? m <= ref : m >= ref); x = 0 <= ref ? ++m : --m) {
+        results.push(0xFFFFFFFF);
+      }
+      return results;
+    })();
+    if (phase === 1) {
+      moves = allMoves1;
+    } else {
+      moves = allMoves2;
+    }
+    depth = 0;
+    pruning(table, 0, depth);
+    done = 1;
+    // In each iteration, take each state found in the previous depth and
+    // compute the next state. Stop when all states have been assigned a
+    // depth.
+    while (done !== size) {
+      for (index = m = 0, ref = size - 1; (0 <= ref ? m <= ref : m >= ref); index = 0 <= ref ? ++m : --m) {
+        if (!(pruning(table, index) === depth)) {
+          continue;
+        }
+        current = currentCoords(index);
+        for (o = 0, len = moves.length; o < len; o++) {
+          move = moves[o];
+          next = nextIndex(current, move);
+          if (pruning(table, next) === 0xF) {
+            pruning(table, next, depth + 1);
+            done++;
+          }
+        }
+      }
+      depth++;
+    }
+    return table;
+  };
+
+  Cube.pruningTables = {
+    sliceTwist: null,
+    sliceFlip: null,
+    sliceURFtoDLFParity: null,
+    sliceURtoDFParity: null
+  };
+
+  pruningTableParams = {
+    // name: [phase, size, currentCoords, nextIndex]
+    sliceTwist: [
+      1,
+      N_SLICE1 * N_TWIST,
+      function(index) {
+        return [index % N_SLICE1,
+      index / N_SLICE1 | 0];
+      },
+      function(current,
+      move) {
+        var newSlice,
+      newTwist,
+      slice,
+      twist;
+        [slice,
+      twist] = current;
+        newSlice = Cube.moveTables.FRtoBR[slice * 24][move] / 24 | 0;
+        newTwist = Cube.moveTables.twist[twist][move];
+        return newTwist * N_SLICE1 + newSlice;
+      }
+    ],
+    sliceFlip: [
+      1,
+      N_SLICE1 * N_FLIP,
+      function(index) {
+        return [index % N_SLICE1,
+      index / N_SLICE1 | 0];
+      },
+      function(current,
+      move) {
+        var flip,
+      newFlip,
+      newSlice,
+      slice;
+        [slice,
+      flip] = current;
+        newSlice = Cube.moveTables.FRtoBR[slice * 24][move] / 24 | 0;
+        newFlip = Cube.moveTables.flip[flip][move];
+        return newFlip * N_SLICE1 + newSlice;
+      }
+    ],
+    sliceURFtoDLFParity: [
+      2,
+      N_SLICE2 * N_URFtoDLF * N_PARITY,
+      function(index) {
+        return [index % 2,
+      (index / 2 | 0) % N_SLICE2,
+      (index / 2 | 0) / N_SLICE2 | 0];
+      },
+      function(current,
+      move) {
+        var URFtoDLF,
+      newParity,
+      newSlice,
+      newURFtoDLF,
+      parity,
+      slice;
+        [parity,
+      slice,
+      URFtoDLF] = current;
+        newParity = Cube.moveTables.parity[parity][move];
+        newSlice = Cube.moveTables.FRtoBR[slice][move];
+        newURFtoDLF = Cube.moveTables.URFtoDLF[URFtoDLF][move];
+        return (newURFtoDLF * N_SLICE2 + newSlice) * 2 + newParity;
+      }
+    ],
+    sliceURtoDFParity: [
+      2,
+      N_SLICE2 * N_URtoDF * N_PARITY,
+      function(index) {
+        return [index % 2,
+      (index / 2 | 0) % N_SLICE2,
+      (index / 2 | 0) / N_SLICE2 | 0];
+      },
+      function(current,
+      move) {
+        var URtoDF,
+      newParity,
+      newSlice,
+      newURtoDF,
+      parity,
+      slice;
+        [parity,
+      slice,
+      URtoDF] = current;
+        newParity = Cube.moveTables.parity[parity][move];
+        newSlice = Cube.moveTables.FRtoBR[slice][move];
+        newURtoDF = Cube.moveTables.URtoDF[URtoDF][move];
+        return (newURtoDF * N_SLICE2 + newSlice) * 2 + newParity;
+      }
+    ]
+  };
+
+  Cube.computePruningTables = function(...tables) {
+    var len, m, name, params, tableName;
+    if (tables.length === 0) {
+      tables = (function() {
+        var results;
+        results = [];
+        for (name in pruningTableParams) {
+          results.push(name);
+        }
+        return results;
+      })();
+    }
+    for (m = 0, len = tables.length; m < len; m++) {
+      tableName = tables[m];
+      if (this.pruningTables[tableName] !== null) {
+        // Already computed
+        continue;
+      }
+      params = pruningTableParams[tableName];
+      this.pruningTables[tableName] = computePruningTable(...params);
+    }
+    return this;
+  };
+
+  Cube.initSolver = function() {
+    Cube.computeMoveTables();
+    return Cube.computePruningTables();
+  };
+
+  Cube.prototype.solveUpright = function(maxDepth = 22) {
+    var State, freeStates, moveNames, phase1, phase1search, phase2, phase2search, solution, state, x;
+    // Names for all moves, i.e. U, U2, U', F, F2, ...
+    moveNames = (function() {
+      var face, faceName, m, o, power, powerName, result;
+      faceName = ['U', 'R', 'F', 'D', 'L', 'B'];
+      powerName = ['', '2', "'"];
+      result = [];
+      for (face = m = 0; m <= 5; face = ++m) {
+        for (power = o = 0; o <= 2; power = ++o) {
+          result.push(faceName[face] + powerName[power]);
+        }
+      }
+      return result;
+    })();
+    State = class State {
+      constructor(cube) {
+        this.parent = null;
+        this.lastMove = null;
+        this.depth = 0;
+        if (cube) {
+          this.init(cube);
+        }
+      }
+
+      init(cube) {
+        // Phase 1 coordinates
+        this.flip = cube.flip();
+        this.twist = cube.twist();
+        this.slice = cube.FRtoBR() / N_SLICE2 | 0;
+        // Phase 2 coordinates
+        this.parity = cube.cornerParity();
+        this.URFtoDLF = cube.URFtoDLF();
+        this.FRtoBR = cube.FRtoBR();
+        // These are later merged to URtoDF when phase 2 begins
+        this.URtoUL = cube.URtoUL();
+        this.UBtoDF = cube.UBtoDF();
+        return this;
+      }
+
+      solution() {
+        if (this.parent) {
+          return this.parent.solution() + moveNames[this.lastMove] + ' ';
+        } else {
+          return '';
+        }
+      }
+
+      //# Helpers
+      move(table, index, move) {
+        return Cube.moveTables[table][index][move];
+      }
+
+      pruning(table, index) {
+        return pruning(Cube.pruningTables[table], index);
+      }
+
+      //# Phase 1
+
+      // Return the next valid phase 1 moves for this state
+      moves1() {
+        if (this.lastMove !== null) {
+          return nextMoves1[this.lastMove / 3 | 0];
+        } else {
+          return allMoves1;
+        }
+      }
+
+      // Compute the minimum number of moves to the end of phase 1
+      minDist1() {
+        var d1, d2;
+        // The maximum number of moves to the end of phase 1 wrt. the
+        // combination flip and slice coordinates only
+        d1 = this.pruning('sliceFlip', N_SLICE1 * this.flip + this.slice);
+        // The combination of twist and slice coordinates
+        d2 = this.pruning('sliceTwist', N_SLICE1 * this.twist + this.slice);
+        // The true minimal distance is the maximum of these two
+        return max(d1, d2);
+      }
+
+      // Compute the next phase 1 state for the given move
+      next1(move) {
+        var next;
+        next = freeStates.pop();
+        next.parent = this;
+        next.lastMove = move;
+        next.depth = this.depth + 1;
+        next.flip = this.move('flip', this.flip, move);
+        next.twist = this.move('twist', this.twist, move);
+        next.slice = this.move('FRtoBR', this.slice * 24, move) / 24 | 0;
+        return next;
+      }
+
+      //# Phase 2
+
+      // Return the next valid phase 2 moves for this state
+      moves2() {
+        if (this.lastMove !== null) {
+          return nextMoves2[this.lastMove / 3 | 0];
+        } else {
+          return allMoves2;
+        }
+      }
+
+      // Compute the minimum number of moves to the solved cube
+      minDist2() {
+        var d1, d2, index1, index2;
+        index1 = (N_SLICE2 * this.URtoDF + this.FRtoBR) * N_PARITY + this.parity;
+        d1 = this.pruning('sliceURtoDFParity', index1);
+        index2 = (N_SLICE2 * this.URFtoDLF + this.FRtoBR) * N_PARITY + this.parity;
+        d2 = this.pruning('sliceURFtoDLFParity', index2);
+        return max(d1, d2);
+      }
+
+      // Initialize phase 2 coordinates
+      init2(top = true) {
+        if (this.parent === null) {
+          return;
+        }
+        // For other states, the phase 2 state is computed based on
+        // parent's state.
+        // Already assigned for the initial state
+        this.parent.init2(false);
+        this.URFtoDLF = this.move('URFtoDLF', this.parent.URFtoDLF, this.lastMove);
+        this.FRtoBR = this.move('FRtoBR', this.parent.FRtoBR, this.lastMove);
+        this.parity = this.move('parity', this.parent.parity, this.lastMove);
+        this.URtoUL = this.move('URtoUL', this.parent.URtoUL, this.lastMove);
+        this.UBtoDF = this.move('UBtoDF', this.parent.UBtoDF, this.lastMove);
+        if (top) {
+          // This is the initial phase 2 state. Get the URtoDF coordinate
+          // by merging URtoUL and UBtoDF
+          return this.URtoDF = this.move('mergeURtoDF', this.URtoUL, this.UBtoDF);
+        }
+      }
+
+      // Compute the next phase 2 state for the given move
+      next2(move) {
+        var next;
+        next = freeStates.pop();
+        next.parent = this;
+        next.lastMove = move;
+        next.depth = this.depth + 1;
+        next.URFtoDLF = this.move('URFtoDLF', this.URFtoDLF, move);
+        next.FRtoBR = this.move('FRtoBR', this.FRtoBR, move);
+        next.parity = this.move('parity', this.parity, move);
+        next.URtoDF = this.move('URtoDF', this.URtoDF, move);
+        return next;
+      }
+
+    };
+    solution = null;
+    phase1search = function(state) {
+      var depth, m, ref, results;
+      depth = 0;
+      results = [];
+      for (depth = m = 1, ref = maxDepth; (1 <= ref ? m <= ref : m >= ref); depth = 1 <= ref ? ++m : --m) {
+        phase1(state, depth);
+        if (solution !== null) {
+          break;
+        }
+        results.push(depth++);
+      }
+      return results;
+    };
+    phase1 = function(state, depth) {
+      var len, m, move, next, ref, ref1, results;
+      if (depth === 0) {
+        if (state.minDist1() === 0) {
+          // Make sure we don't start phase 2 with a phase 2 move as the
+          // last move in phase 1, because phase 2 would then repeat the
+          // same move.
+          if (state.lastMove === null || (ref = state.lastMove, indexOf.call(allMoves2, ref) < 0)) {
+            return phase2search(state);
+          }
+        }
+      } else if (depth > 0) {
+        if (state.minDist1() <= depth) {
+          ref1 = state.moves1();
+          results = [];
+          for (m = 0, len = ref1.length; m < len; m++) {
+            move = ref1[m];
+            next = state.next1(move);
+            phase1(next, depth - 1);
+            freeStates.push(next);
+            if (solution !== null) {
+              break;
+            } else {
+              results.push(void 0);
+            }
+          }
+          return results;
+        }
+      }
+    };
+    phase2search = function(state) {
+      var depth, m, ref, results;
+      // Initialize phase 2 coordinates
+      state.init2();
+      results = [];
+      for (depth = m = 1, ref = maxDepth - state.depth; (1 <= ref ? m <= ref : m >= ref); depth = 1 <= ref ? ++m : --m) {
+        phase2(state, depth);
+        if (solution !== null) {
+          break;
+        }
+        results.push(depth++);
+      }
+      return results;
+    };
+    phase2 = function(state, depth) {
+      var len, m, move, next, ref, results;
+      if (depth === 0) {
+        if (state.minDist2() === 0) {
+          return solution = state.solution();
+        }
+      } else if (depth > 0) {
+        if (state.minDist2() <= depth) {
+          ref = state.moves2();
+          results = [];
+          for (m = 0, len = ref.length; m < len; m++) {
+            move = ref[m];
+            next = state.next2(move);
+            phase2(next, depth - 1);
+            freeStates.push(next);
+            if (solution !== null) {
+              break;
+            } else {
+              results.push(void 0);
+            }
+          }
+          return results;
+        }
+      }
+    };
+    freeStates = (function() {
+      var m, ref, results;
+      results = [];
+      for (x = m = 0, ref = maxDepth + 1; (0 <= ref ? m <= ref : m >= ref); x = 0 <= ref ? ++m : --m) {
+        results.push(new State);
+      }
+      return results;
+    })();
+    state = freeStates.pop().init(this);
+    phase1search(state);
+    freeStates.push(state);
+    // Trim the trailing space
+    if (solution.length > 0) {
+      solution = solution.substring(0, solution.length - 1);
+    }
+    return solution;
+  };
+
+  faceNums = {
+    U: 0,
+    R: 1,
+    F: 2,
+    D: 3,
+    L: 4,
+    B: 5
+  };
+
+  faceNames = {
+    0: 'U',
+    1: 'R',
+    2: 'F',
+    3: 'D',
+    4: 'L',
+    5: 'B'
+  };
+
+  Cube.prototype.solve = function(maxDepth = 22) {
+    var clone, len, m, move, ref, rotation, solution, upright, uprightSolution;
+    clone = this.clone();
+    upright = clone.upright();
+    clone.move(upright);
+    rotation = new Cube().move(upright).center;
+    uprightSolution = clone.solveUpright(maxDepth);
+    solution = [];
+    ref = uprightSolution.split(' ');
+    for (m = 0, len = ref.length; m < len; m++) {
+      move = ref[m];
+      solution.push(faceNames[rotation[faceNums[move[0]]]]);
+      if (move.length > 1) {
+        solution[solution.length - 1] += move[1];
+      }
+    }
+    return solution.join(' ');
+  };
+
+  Cube.scramble = function() {
+    return Cube.inverse(Cube.random().solve());
+  };
+
+}).call(this);
+
+</script>
+<script>
+/*
+ * Cube Face Solver app.
+ *
+ * Uses the bundled cubejs library (Kociemba two-phase solver) as the
+ * sole source of truth for cube legality and solving -- no hand-rolled
+ * cube geometry. Core single-cube algorithm (verified extensively
+ * during development against random trials with full round-trip
+ * checks):
+ *
+ *   1. Take a cube's CURRENT 54-letter state (U/R/F/D/L/B cubejs
+ *      letters) and a TARGET 3x3 pattern for one chosen face.
+ *   2. Construct a legal full-cube target state with that exact
+ *      pattern on the chosen face (build_target logic, ported from a
+ *      verified Node prototype), using cubejs's native cp/co/ep/eo
+ *      representation and the EXACT validity rules from cubejs's own
+ *      source (permutation swap-parity, corner/edge orientation parity).
+ *   3. moves = solve(current) + inverse(solve(target)) -- i.e. go
+ *      current -> solved -> target. This works because solve() always
+ *      finds a path TO the solved state; chaining one forward solve
+ *      with one reversed solve lets us reach ANY other legal state.
+ *   4. VERIFY the result before showing it: apply the moves to the
+ *      current state and confirm the target face matches exactly.
+ *
+ * Single mode now -- "pattern": whole-mosaic, bulk text input. You
+ * paste every target pattern (one line per cube) and describe your
+ * available starting cubes (solved count / pasted pool / a previously
+ * saved export) ONCE, then hit Submit. The planner first finds free
+ * reuses (a pool cube that already shows a needed pattern, in any of
+ * its 24 face/rotation orientations, needs zero moves) and then solves
+ * everything else, one real solve per remaining target, automatically.
+ * (An earlier "paint" mode -- one cube at a time, by hand -- has been
+ * removed: it doesn't fit a real mosaic workflow of hundreds of cubes.)
+ */
+const FACE_ORDER = ['U', 'R', 'F', 'D', 'L', 'B'];
+const FACE_FULL_NAMES = { U: 'Up', R: 'Right', F: 'Front', D: 'Down', L: 'Left', B: 'Back' };
+
+// Default palette -- generic labels since we don't assume the user's
+// actual cube color scheme. The user just needs to be CONSISTENT:
+// whichever swatch they put at a face's center defines that face.
+const PALETTE = [
+  { id: 'c0', hex: '#ffffff', name: 'White', code: 'W' },
+  { id: 'c1', hex: '#ffd500', name: 'Yellow', code: 'Y' },
+  { id: 'c2', hex: '#b71234', name: 'Red', code: 'R' },
+  { id: 'c3', hex: '#ff5800', name: 'Orange', code: 'O' },
+  { id: 'c4', hex: '#0046ad', name: 'Blue', code: 'B' },
+  { id: 'c5', hex: '#009b48', name: 'Green', code: 'G' },
+];
+const CODE_TO_PALETTE_ID = {};
+PALETTE.forEach(p => { CODE_TO_PALETTE_ID[p.code] = p.id; });
+const CORNER_NAMES = ['URF', 'UFL', 'ULB', 'UBR', 'DFR', 'DLF', 'DBL', 'DRB'];
+const CORNER_COLORS = [['U','R','F'], ['U','F','L'], ['U','L','B'], ['U','B','R'], ['D','F','R'], ['D','L','F'], ['D','B','L'], ['D','R','B']];
+const EDGE_NAMES = ['UR', 'UF', 'UL', 'UB', 'DR', 'DF', 'DL', 'DB', 'FR', 'FL', 'BL', 'BR'];
+const EDGE_COLORS = [['U','R'], ['U','F'], ['U','L'], ['U','B'], ['D','R'], ['D','F'], ['D','L'], ['D','B'], ['F','R'], ['F','L'], ['B','L'], ['B','R']];
+
+const CORNER_POSITIONS = {
+  0: { U: [2,2], R: [0,0], F: [0,2] },
+  1: { U: [2,0], F: [0,0], L: [0,2] },
+  2: { U: [0,0], L: [0,0], B: [0,2] },
+  3: { U: [0,2], B: [0,0], R: [0,2] },
+  4: { D: [0,2], F: [2,2], R: [2,0] },
+  5: { D: [0,0], L: [2,2], F: [2,0] },
+  6: { D: [2,0], B: [2,2], L: [2,0] },
+  7: { D: [2,2], R: [2,2], B: [2,0] },
+};
+const EDGE_POSITIONS = {
+  0: { U: [1,2], R: [0,1] },
+  1: { U: [2,1], F: [0,1] },
+  2: { U: [1,0], L: [0,1] },
+  3: { U: [0,1], B: [0,1] },
+  4: { D: [1,2], R: [2,1] },
+  5: { D: [0,1], F: [2,1] },
+  6: { D: [1,0], L: [2,1] },
+  7: { D: [2,1], B: [2,1] },
+  8: { F: [1,2], R: [1,0] },
+  9: { F: [1,0], L: [1,2] },
+  10:{ B: [1,2], L: [1,0] },
+  11:{ B: [1,0], R: [1,2] },
+};
+
+function getNumSwaps(arr) {
+  const n = arr.length;
+  const seen = new Array(n).fill(false);
+  let numSwaps = 0;
+  while (true) {
+    let cur = -1;
+    for (let i = 0; i < n; i++) { if (!seen[i]) { cur = i; break; } }
+    if (cur === -1) break;
+    let cycleLength = 0;
+    while (!seen[cur]) { seen[cur] = true; cycleLength++; cur = arr[cur]; }
+    numSwaps += cycleLength + 1;
+  }
+  return numSwaps;
+}
+function permutationsValid(cp, ep) {
+  return (getNumSwaps(ep) + getNumSwaps(cp)) % 2 === 0;
+}
+function orientationValid(arr, mod) {
+  return arr.reduce((a, b) => a + b, 0) % mod === 0;
+}
+
+function buildTargetState(targetFace, targetGrid) {
+  const cp = [0,1,2,3,4,5,6,7];
+  const co = [0,0,0,0,0,0,0,0];
+  const ep = [0,1,2,3,4,5,6,7,8,9,10,11];
+  const eo = new Array(12).fill(0);
+
+  const usedCornerPieces = new Set();
+  const usedEdgePieces = new Set();
+  const filledCornerSlots = new Set();
+  const filledEdgeSlots = new Set();
+
+  for (let slot = 0; slot < 8; slot++) {
+    const positions = CORNER_POSITIONS[slot];
+    if (!positions[targetFace]) continue;
+    const [r, c] = positions[targetFace];
+    const desiredColor = targetGrid[r][c];
+    let chosenPiece = -1, colorIdx = -1;
+    for (let p = 0; p < 8; p++) {
+      if (usedCornerPieces.has(p)) continue;
+      const idx = CORNER_COLORS[p].indexOf(desiredColor);
+      if (idx !== -1) { chosenPiece = p; colorIdx = idx; break; }
+    }
+    if (chosenPiece === -1) {
+      return { valid: false, error: `No available corner piece carries color "${desiredColor}" for this slot.` };
+    }
+    const slotNaturalFaces = CORNER_NAMES[slot].split('');
+    const k = slotNaturalFaces.indexOf(targetFace);
+    const ori = ((k - colorIdx) % 3 + 3) % 3;
+    cp[slot] = chosenPiece;
+    co[slot] = ori;
+    usedCornerPieces.add(chosenPiece);
+    filledCornerSlots.add(slot);
+  }
+
+  for (let slot = 0; slot < 12; slot++) {
+    const positions = EDGE_POSITIONS[slot];
+    if (!positions[targetFace]) continue;
+    const [r, c] = positions[targetFace];
+    const desiredColor = targetGrid[r][c];
+    let chosenPiece = -1, colorIdx = -1;
+    for (let p = 0; p < 12; p++) {
+      if (usedEdgePieces.has(p)) continue;
+      const idx = EDGE_COLORS[p].indexOf(desiredColor);
+      if (idx !== -1) { chosenPiece = p; colorIdx = idx; break; }
+    }
+    if (chosenPiece === -1) {
+      return { valid: false, error: `No available edge piece carries color "${desiredColor}" for this slot.` };
+    }
+    const slotNaturalFaces = EDGE_NAMES[slot].split('');
+    const k = slotNaturalFaces.indexOf(targetFace);
+    const ori = ((k - colorIdx) % 2 + 2) % 2;
+    ep[slot] = chosenPiece;
+    eo[slot] = ori;
+    usedEdgePieces.add(chosenPiece);
+    filledEdgeSlots.add(slot);
+  }
+
+  const remainingCornerPieces = [];
+  for (let p = 0; p < 8; p++) if (!usedCornerPieces.has(p)) remainingCornerPieces.push(p);
+  const remainingCornerSlots = [];
+  for (let s = 0; s < 8; s++) if (!filledCornerSlots.has(s)) remainingCornerSlots.push(s);
+  for (let i = 0; i < remainingCornerSlots.length; i++) {
+    cp[remainingCornerSlots[i]] = remainingCornerPieces[i];
+    co[remainingCornerSlots[i]] = 0;
+  }
+
+  const remainingEdgePieces = [];
+  for (let p = 0; p < 12; p++) if (!usedEdgePieces.has(p)) remainingEdgePieces.push(p);
+  const remainingEdgeSlots = [];
+  for (let s = 0; s < 12; s++) if (!filledEdgeSlots.has(s)) remainingEdgeSlots.push(s);
+  for (let i = 0; i < remainingEdgeSlots.length; i++) {
+    ep[remainingEdgeSlots[i]] = remainingEdgePieces[i];
+    eo[remainingEdgeSlots[i]] = 0;
+  }
+
+  if (!permutationsValid(cp, ep)) {
+    if (remainingCornerSlots.length >= 2) {
+      const [a, b] = remainingCornerSlots;
+      [cp[a], cp[b]] = [cp[b], cp[a]];
+    } else if (remainingEdgeSlots.length >= 2) {
+      const [a, b] = remainingEdgeSlots;
+      [ep[a], ep[b]] = [ep[b], ep[a]];
+    } else {
+      return { valid: false, error: 'Could not balance piece parity (no free non-target slots available -- try a different target pattern).' };
+    }
+  }
+
+  if (!orientationValid(co, 3)) {
+    if (remainingCornerSlots.length >= 1) {
+      const slot = remainingCornerSlots[0];
+      const deficit = ((0 - co.reduce((a,b)=>a+b,0)) % 3 + 3) % 3;
+      co[slot] = (co[slot] + deficit) % 3;
+    } else {
+      return { valid: false, error: 'Could not balance corner orientation (no free non-target corner slot available).' };
+    }
+  }
+
+  if (!orientationValid(eo, 2)) {
+    if (remainingEdgeSlots.length >= 1) {
+      const slot = remainingEdgeSlots[0];
+      eo[slot] = (eo[slot] + 1) % 2;
+    } else {
+      return { valid: false, error: 'Could not balance edge orientation (no free non-target edge slot available).' };
+    }
+  }
+
+  const cube = new Cube();
+  cube.cp = cp; cube.co = co; cube.ep = ep; cube.eo = eo;
+  const str = cube.asString();
+
+  return {
+    valid: permutationsValid(cp, ep) && orientationValid(co, 3) && orientationValid(eo, 2),
+    str,
+  };
+}
+
+function faceGridFromString(str, face) {
+  const i = FACE_ORDER.indexOf(face);
+  const block = str.slice(i * 9, i * 9 + 9);
+  return [
+    [block[0], block[1], block[2]],
+    [block[3], block[4], block[5]],
+    [block[6], block[7], block[8]],
+  ];
+}
+
+// Rotating a 3x3 grid 90 deg clockwise, as you'd do by spinning the
+// physical cube face itself while keeping it pointed at you.
+function rotateGrid90(g) {
+  return [
+    [g[2][0], g[1][0], g[0][0]],
+    [g[2][1], g[1][1], g[0][1]],
+    [g[2][2], g[1][2], g[0][2]],
+  ];
+}
+
+// All 24 ways a single physical cube can show *some* face toward you:
+// 6 faces, each rotatable in-place to 4 orientations (since you're
+// free to pick up a cube and turn it any way before setting it down
+// in a mosaic -- nothing pins a "front" or "up" in advance). Returns
+// an array of { face, rotation, pattern } where pattern is a 9-char
+// string read left-to-right, top-to-bottom, and rotation is how many
+// quarter-turns clockwise the natural face grid was spun.
+function allFaceOrientations(str) {
+  const out = [];
+  for (const face of FACE_ORDER) {
+    let grid = faceGridFromString(str, face);
+    for (let rot = 0; rot < 4; rot++) {
+      const pattern = grid.flat().join('');
+      out.push({ face, rotation: rot, pattern });
+      grid = rotateGrid90(grid);
+    }
+  }
+  return out;
+}
+
+// The ONE fixed color<->letter convention this whole tool uses for any
+// state string: cubejs letter U/R/F/D/L/B maps to mosaic color
+// White/Yellow/Red/Orange/Blue/Green.
+// Every 54-char state string the matcher pool sees (pasted exports,
+// "fresh solved" entries) is built under this same convention, so a
+// mosaic-color target pattern (W/Y/R/O/B/G, as pasted from a Ruwix-
+// style instruction sheet) must be translated through this mapping
+// before it can be compared against a state string's cubejs letters --
+// they are NOT the same alphabet and must never be compared directly.
+const MOSAIC_CODE_TO_CUBE_LETTER = { W: 'U', Y: 'R', R: 'F', O: 'D', B: 'L', G: 'B' };
+function inverseMoves(moveStr) {
+  if (!moveStr || moveStr.trim() === '') return '';
+  return moveStr.trim().split(/\s+/).reverse().map(m => {
+    if (m.endsWith("'")) return m[0];
+    if (m.endsWith('2')) return m;
+    return m + "'";
+  }).join(' ');
+}
+
+// Collapses adjacent same-face moves (e.g. "R R'" -> nothing, "R R" -> "R2",
+// "U2 U" -> "U'") repeatedly until no more simplification is possible.
+// Verified equivalence-preserving via extensive random-scramble testing
+// during development (applying original vs. simplified always yields the
+// identical resulting cube state).
+function simplifyMoves(moveStr) {
+  let moves = moveStr.trim().split(/\s+/).filter(Boolean);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    const result = [];
+    for (let i = 0; i < moves.length; i++) {
+      if (result.length > 0 && result[result.length - 1][0] === moves[i][0]) {
+        const prev = result.pop();
+        const prevTurns = prev.length === 1 ? 1 : (prev[1] === '2' ? 2 : 3);
+        const curTurns = moves[i].length === 1 ? 1 : (moves[i][1] === '2' ? 2 : 3);
+        const total = (prevTurns + curTurns) % 4;
+        if (total !== 0) {
+          const face = moves[i][0];
+          const suffix = total === 1 ? '' : (total === 2 ? '2' : "'");
+          result.push(face + suffix);
+        }
+        changed = true;
+      } else {
+        result.push(moves[i]);
+      }
+    }
+    moves = result;
+  }
+  return moves.join(' ');
+}
+
+function solveForFace(currentStateStr, targetFace, targetGridLetters) {
+  const grid = targetGridLetters.map(row => [...row]);
+  grid[1][1] = targetFace; // center is always the face's own color, physically fixed
+
+  const buildResult = buildTargetState(targetFace, grid);
+  if (!buildResult.valid) {
+    return { success: false, error: buildResult.error || 'Could not construct a valid target arrangement for this pattern.' };
+  }
+
+  let currentCube, targetCube;
+  try {
+    currentCube = Cube.fromString(currentStateStr);
+    targetCube = Cube.fromString(buildResult.str);
+  } catch (e) {
+    return { success: false, error: `Invalid cube state: ${e.message}` };
+  }
+
+  let movesA, movesB;
+  try {
+    movesA = currentCube.solve();
+    movesB = targetCube.solve();
+  } catch (e) {
+    return { success: false, error: `Solver error: ${e.message}` };
+  }
+
+  const movesBInverse = inverseMoves(movesB);
+  const rawSequence = [movesA, movesBInverse].filter(s => s.trim() !== '').join(' ').trim();
+  const fullSequence = simplifyMoves(rawSequence);
+
+  const verifyCube = Cube.fromString(currentStateStr);
+  if (fullSequence !== '') verifyCube.move(fullSequence);
+  const finalStr = verifyCube.asString();
+  const achievedFaceGrid = faceGridFromString(finalStr, targetFace);
+  const targetMatches = JSON.stringify(achievedFaceGrid) === JSON.stringify(grid);
+
+  if (!targetMatches) {
+    return {
+      success: false,
+      error: 'Internal verification failed -- the computed moves did not produce the requested pattern. Please try again or report this.',
+    };
+  }
+
+  return {
+    success: true,
+    moves: fullSequence === '' ? '(already matches -- no moves needed)' : fullSequence,
+    moveCount: fullSequence === '' ? 0 : fullSequence.split(/\s+/).length,
+    finalStr, // the verified real resulting 6-face state, for chaining into a future mosaic
+  };
+}
+const FACE_LETTERS = new Set(['U', 'R', 'F', 'D', 'L', 'B']);
+function parseStartingStateInput(text) {
+  const raw = text.trim();
+  if (raw === '') return null;
+  const cleaned = raw.toUpperCase().replace(/\s/g, '');
+  if (cleaned.length !== 54) {
+    return { str: null, error: `Expected 54 letters, got ${cleaned.length}.` };
+  }
+  const invalidChar = [...cleaned].find(ch => !FACE_LETTERS.has(ch));
+  if (invalidChar) {
+    return { str: null, error: `Unrecognized letter "${invalidChar}". Use only U, R, F, D, L, B.` };
+  }
+  // Cube.fromString doesn't check that each color appears exactly 9
+  // times (a real cube always has exactly 9 of each), so a corrupted
+  // or hand-edited string could otherwise be silently accepted as
+  // "valid" while describing a cube that doesn't physically exist.
+  const counts = {};
+  for (const ch of cleaned) counts[ch] = (counts[ch] || 0) + 1;
+  const badCounts = Object.entries(counts).filter(([, n]) => n !== 9);
+  if (badCounts.length > 0 || Object.keys(counts).length !== 6) {
+    const detail = Object.keys(counts).map(k => `${k}:${counts[k]}`).join(', ');
+    return { str: null, error: `Each of the 6 letters must appear exactly 9 times (got ${detail}).` };
+  }
+  // Validate it's actually a legal, solvable cube state before accepting it --
+  // catches typos/corruption rather than handing the solver something that
+  // could hang (see Cube.fromString / .solve()).
+  try {
+    const testCube = Cube.fromString(cleaned);
+    testCube.solve(); // throws if unsolvable; result discarded, this is just a validity check
+  } catch (e) {
+    return { str: null, error: `Not a valid/solvable cube state: ${e.message}` };
+  }
+  return { str: cleaned, error: null };
+}
+
+// =====================================================================
+// State
+// =====================================================================
+
+let appState = {
+  solverReady: false,
+
+  // --- Pattern mode: whole mosaic, bulk text entry ---
+  // (This used to be one of two top-level modes; the old one-cube-at-
+  // a-time "Paint" mode was removed since it doesn't fit a real mosaic
+  // workflow of hundreds of cubes. Pattern mode is the only mode now.)
+  // Starting state is built from a STACKABLE list of source rows for
+  // any cubes that AREN'T starting solved -- e.g. leftovers from the
+  // Cat Mosaic export, plus another pasted batch. Each row is
+  // independently typed ('lastExport' / 'paste' / 'solved') and
+  // configured; buildStartingPool() below concatenates all rows into
+  // one pool. The very first row defaults to 'solved' here, but that
+  // default gets upgraded to 'lastExport' on first render if any saved
+  // exports already exist -- see patternStartRowsDefaultApplied below.
+  patternStartRows: [{ id: 1, type: 'solved', exportName: null, pasteText: '' }],
+  patternStartRowNextId: 2,
+  // Tracks whether we've already picked the initial row's default
+  // type based on saved-export availability. Only happens once, the
+  // first time the panel renders -- after that, the row's type is the
+  // user's own choice and must never be silently overwritten again.
+  patternStartRowsDefaultApplied: false,
+  // Target mosaic -- always bulk text in pattern mode.
+  patternTargetInput: '', // raw textarea, one 9-letter W/Y/R/O/B/G line per cube
+  // Optional: how many cubes wide the mosaic is, purely for the visual
+  // grid preview and for showing each placement's row/column instead
+  // of just a flat line number. Null/empty means "unknown" -- the tool
+  // still works fine without it, just shows a flat list instead of a grid.
+  patternMosaicWidth: null,
+  // Optional: how many cubes this mosaic SHOULD have, entered once up
+  // front (e.g. from the source PDF/instructions) purely as a sanity
+  // check against what actually got pasted into patternTargetInput.
+  // Null/empty means "not checking" -- the tool works fine without it,
+  // it just can't catch a miscount for you. This is deliberately
+  // SEPARATE from patternMosaicWidth: width is about shape (for the
+  // preview grid), this is about total count (a wrong line count
+  // silently shifts every row/column mapping after it, so it's worth
+  // a dedicated check independent of whether width is even set).
+  patternExpectedCount: null,
+  // Set true once the user has clicked through the mismatch-confirm
+  // dialog for the CURRENT mismatched input, so re-renders triggered by
+  // unrelated state changes (e.g. typing in a starting-pool row) don't
+  // re-ask. Reset to false any time the target text or expected count
+  // changes, since a "yes, submit anyway" for one mismatch shouldn't
+  // silently cover a different, later mismatch.
+  patternCountMismatchAcked: false,
+  // Optional row-range filter for the plan results list, so you can
+  // narrow hundreds of placements down to just the physical section
+  // of the mosaic you're currently working through. { from, to } | null.
+  patternPlanRowFilter: null,
+  // The current/last plan RUN. Unlike a single one-shot return value,
+  // this is a mutable, incrementally-built, PERSISTABLE object: large
+  // mosaics (hundreds of cubes) take real time to solve, so the run
+  // happens in small chunks (see runPlanChunk) with progress updates
+  // between chunks rather than freezing the page, and the in-progress
+  // state is saved to localStorage after every chunk so a reload mid-
+  // mosaic can resume from the last completed target instead of
+  // starting over. status: 'idle' | 'running' | 'done' | 'cancelled'.
+  patternPlanState: null,
+
+  // --- Shared session record ---
+  // Every REAL solve this session gets its verified resulting 54-char
+  // state recorded here -- the only physically correct way to know a
+  // cube's state after solving it. Exportable, and also offered as a
+  // future mosaic's "last export" pool.
+  solveLog: [], // { source: 'pattern', label, resultStr }[]
+};
+
+// =====================================================================
+// Saved exports (localStorage) -- lets pattern mode's "Use last
+// mosaic's pattern" option list real past exports without the user
+// re-uploading a file. This is a plain local browser file (opened via
+// file://, per the user), so localStorage persists across sessions on
+// the same machine/browser. We also still offer a plain .txt download
+// for backup/portability -- localStorage is just the convenient default.
+// =====================================================================
+
+const EXPORTS_STORAGE_KEY = 'cubeFaceSolver.savedExports';
+const PLAN_RUN_STORAGE_KEY = 'cubeFaceSolver.inProgressPlanRun';
+
+// Persists the in-progress plan run after every chunk, so a reload or
+// crash mid-mosaic (hundreds of cubes can take real time) can resume
+// from the last completed target instead of losing all progress.
+// Cleared once the run finishes, is cancelled, or a new run starts.
+function savePlanRunProgress(planState) {
+  try {
+    localStorage.setItem(PLAN_RUN_STORAGE_KEY, JSON.stringify(planState));
+    return true;
+  } catch (e) {
+    return false; // storage unavailable/full -- resume just won't be offered; the run itself still completes
+  }
+}
+function loadPlanRunProgress() {
+  try {
+    const raw = localStorage.getItem(PLAN_RUN_STORAGE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch (e) {
+    return null;
+  }
+}
+function clearPlanRunProgress() {
+  try { localStorage.removeItem(PLAN_RUN_STORAGE_KEY); } catch (e) { /* ignore */ }
+}
+
+
+function loadSavedExports() {
+  try {
+    const raw = localStorage.getItem(EXPORTS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (e) {
+    return []; // corrupted storage or unavailable (e.g. some strict privacy modes) -- fail soft
+  }
+}
+
+function saveSavedExports(list) {
+  try {
+    localStorage.setItem(EXPORTS_STORAGE_KEY, JSON.stringify(list));
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+// Saves the CURRENT solveLog as a named export entry (most recent
+// first), so it becomes selectable as a future mosaic's starting pool.
+function saveCurrentLogAsExport(name) {
+  const list = loadSavedExports();
+  // Auto-suffix on a name collision rather than silently creating two
+  // indistinguishable entries in the picker (a real trap: you'd have
+  // no way to tell which "Cat Mosaic" is which without opening each).
+  let finalName = name;
+  let suffix = 2;
+  while (list.some(e => e.name === finalName)) {
+    finalName = `${name} (${suffix})`;
+    suffix++;
+  }
+  const lines = appState.solveLog.map(e => e.resultStr);
+  list.unshift({ name: finalName, savedAt: new Date().toISOString(), lines });
+  saveSavedExports(list.slice(0, 50)); // cap so storage can't grow unbounded
+  return finalName;
+}
+
+// =====================================================================
+// Shared color helpers
+// =====================================================================
+
+const VALID_CODES = new Set(PALETTE.map(p => p.code));
+
+function paletteIdToHex(id) {
+  const p = PALETTE.find(p => p.id === id);
+  return p ? p.hex : '#444';
+}
+
+// =====================================================================
+// Pattern mode: whole-mosaic planning
+// =====================================================================
+
+// The ONE fixed color<->letter convention this whole tool uses for any
+// state string: cubejs letter U/R/F/D/L/B maps to mosaic color
+// White/Yellow/Red/Orange/Blue/Green (see MOSAIC_CODE_TO_CUBE_LETTER
+// above). Every 54-char state string pattern mode touches (a fresh
+// solved cube, a pasted export line, a verified solve result) is built
+// under this same convention, so it's always safe to translate a
+// mosaic-color target pattern through this fixed map before comparing
+// or solving -- the two letter alphabets are never compared directly.
+
+const CUBE_LETTER_TO_MOSAIC_CODE = {};
+Object.entries(MOSAIC_CODE_TO_CUBE_LETTER).forEach(([mosaic, cube]) => { CUBE_LETTER_TO_MOSAIC_CODE[cube] = mosaic; });
+
+function solvedStateString() {
+  return FACE_ORDER.map(f => f.repeat(9)).join('');
+}
+
+// Parses the bulk "this mosaic's targets" textarea: one 9-letter
+// W/Y/R/O/B/G pattern per line, in mosaic order. Blank lines are
+// skipped (so pasting with spacing/groupings from a PDF conversion
+// doesn't break). Returns { targets, errors }, where each target is
+// { lineNum, mosaicPattern, cubeGrid } -- mosaicPattern keeps the
+// original W/Y/R/O/B/G letters (for display and for allFaceOrientations
+// comparisons against pool cubes), cubeGrid is the SAME 9 cells as a
+// 3x3 array of cubejs U/R/F/D/L/B letters (what solveForFace needs).
+function parseMosaicTargets(text) {
+  const lines = text.split('\n');
+  const targets = [];
+  const errors = [];
+  lines.forEach((line, idx) => {
+    const raw = line.trim();
+    if (raw === '') return;
+    const cleaned = raw.toUpperCase().replace(/[\s,]/g, '');
+    if (cleaned.length !== 9) {
+      errors.push(`Line ${idx + 1}: expected 9 letters, got ${cleaned.length} ("${raw}").`);
+      return;
+    }
+    const invalidChar = [...cleaned].find(ch => !VALID_CODES.has(ch));
+    if (invalidChar) {
+      errors.push(`Line ${idx + 1}: unrecognized letter "${invalidChar}". Use only W, Y, R, O, B, G.`);
+      return;
+    }
+    const cubeLetters = [...cleaned].map(ch => MOSAIC_CODE_TO_CUBE_LETTER[ch]);
+    const cubeGrid = [cubeLetters.slice(0, 3), cubeLetters.slice(3, 6), cubeLetters.slice(6, 9)];
+    const cubePattern = cubeLetters.join(''); // flat cubejs-letter string, for comparing against allFaceOrientations output (which is ALSO cubejs letters -- never compare mosaicPattern against that directly)
+    targets.push({ lineNum: idx + 1, mosaicPattern: cleaned, cubeGrid, cubePattern });
+  });
+  return { targets, errors };
+}
+
+// Parses the bulk starting-pool textarea: one 54-letter cubejs state
+// per line. Reuses the same strict validator as a single-state input
+// (exact counts of 9, and a real solvable state) since a corrupted
+// line here would otherwise silently produce a wrong plan.
+function parseMosaicPool(text) {
+  const lines = text.split('\n');
+  const pool = [];
+  const errors = [];
+  lines.forEach((line, idx) => {
+    const raw = line.trim();
+    if (raw === '') return;
+    const parsed = parseStartingStateInput(raw);
+    if (!parsed || !parsed.str) {
+      errors.push(`Pool line ${idx + 1}: ${parsed ? parsed.error : 'empty'}`);
+      return;
+    }
+    pool.push({ lineNum: idx + 1, str: parsed.str, label: `pasted line ${idx + 1}` });
+  });
+  return { pool, errors };
+}
+
+// Builds one row's pool fragment, by its type ('lastExport' or
+// 'paste' -- 'solved' is NOT a row type: solved cubes are an
+// AUTOMATIC fallback, not something you configure, see planMosaic
+// below). Each fragment's entries carry a label identifying which
+// row/source they came from, so the final plan can show e.g. "from
+// Cat Mosaic export" vs "fresh solved cube" side by side, even though
+// matching treats them identically.
+function buildPoolForRow(row) {
+  if (row.type === 'lastExport') {
+    if (!row.exportName) return { pool: [], errors: [] }; // not chosen yet -- not an error, just nothing to add
+    const exportsList = loadSavedExports();
+    const entry = exportsList.find(e => e.name === row.exportName);
+    if (!entry) return { pool: [], errors: [`Saved export "${row.exportName}" could not be found.`] };
+    const pool = [];
+    const errors = [];
+    entry.lines.forEach((line, idx) => {
+      const parsed = parseStartingStateInput(line);
+      if (!parsed || !parsed.str) {
+        errors.push(`Export "${entry.name}" line ${idx + 1}: ${parsed ? parsed.error : 'empty'}`);
+        return;
+      }
+      pool.push({ str: parsed.str, label: `"${entry.name}" line ${idx + 1}` });
+    });
+    return { pool, errors };
+  }
+  if (row.type === 'paste') {
+    const { pool, errors } = parseMosaicPool(row.pasteText);
+    return { pool: pool.map(p => ({ str: p.str, label: p.label })), errors };
+  }
+  return { pool: [], errors: [] };
+}
+
+// Builds the FULL starting pool by concatenating every configured
+// row, in row order. Row order only affects which row's label a
+// given cube displays under in the result -- it never affects WHICH
+// matches are found, since the free-match pass checks every pool
+// cube against every remaining target regardless of source.
+// Lightweight count label shown under a paste-type starting-pool row
+// (e.g. "12 cubes parsed", or an error count if some lines didn't
+// parse). This is informational only -- unlike the target mosaic's
+// expected-count check, there's no confirm-gate here and no "expected"
+// field to compare against, since a starting-pool miscount is low
+// stakes (the planner auto-fills any shortfall with fresh solved
+// cubes, and a surplus just leaves a few pool cubes unused).
+function rowPasteCountLabel(row) {
+  if (row.pasteText.trim() === '') return 'No cubes pasted yet.';
+  const { pool, errors } = parseMosaicPool(row.pasteText);
+  if (errors.length > 0) {
+    return `${pool.length} cube${pool.length === 1 ? '' : 's'} parsed, ${errors.length} line${errors.length === 1 ? '' : 's'} couldn't be read -- see errors after submitting.`;
+  }
+  return `${pool.length} cube${pool.length === 1 ? '' : 's'} parsed.`;
+}
+
+function buildStartingPool() {
+  const pool = [];
+  const errors = [];
+  for (const row of appState.patternStartRows) {
+    const frag = buildPoolForRow(row);
+    pool.push(...frag.pool);
+    errors.push(...frag.errors);
+  }
+  return { pool, errors };
+}
+
+// Runs the FREE-MATCH pass: for each pool cube (in order), check every
+// remaining unmatched target's mosaicPattern against all 24 of that
+// cube's face/rotation orientations; on the first hit, claim it for
+// that target (zero moves). This is a simple greedy match -- only
+// EXACT matches count as free; nothing here estimates "close" matches,
+// since that would require solving every pool-target pair anyway (see
+// design discussion -- there's no cheap shortcut, only a full search,
+// which is what the SOLVE pass below does one target at a time).
+function runFreeMatchPass(targets, pool) {
+  const matchedTargetIdx = new Set();
+  const matchedPoolIdx = new Set();
+  const freeMatches = [];
+
+  // Iterate a FIXED snapshot of pool entries (by original index) so
+  // mutation never happens mid-loop -- a prior version spliced
+  // remainingPool while iterating over it, which skipped entries and
+  // silently produced wrong (too few) matches.
+  for (let pi = 0; pi < pool.length; pi++) {
+    const entry = pool[pi];
+    const orientations = allFaceOrientations(entry.str);
+    let hitTi = -1, hitOrientation = null;
+    for (let ti = 0; ti < targets.length; ti++) {
+      if (matchedTargetIdx.has(ti)) continue; // already claimed by an earlier pool cube
+      const target = targets[ti];
+      const hit = orientations.find(o => o.pattern === target.cubePattern);
+      if (hit) { hitTi = ti; hitOrientation = hit; break; }
+    }
+    if (hitTi !== -1) {
+      matchedTargetIdx.add(hitTi);
+      matchedPoolIdx.add(pi);
+      freeMatches.push({ target: targets[hitTi], pool: entry, orientation: hitOrientation });
+    }
+  }
+
+  const remainingTargets = targets.filter((_, ti) => !matchedTargetIdx.has(ti));
+  const remainingPool = pool.filter((_, pi) => !matchedPoolIdx.has(pi));
+
+  return { freeMatches, remainingTargets, remainingPool };
+}
+
+// The full mosaic planner: free-match pass first, then a real solve
+// for every remaining target using the next available pool cube (or a
+// fresh solved cube once the pool runs out). Always solves toward
+// face 'F' -- in pattern mode no face choice is exposed to the user,
+// and any face works equally well since the mosaic doesn't care which
+// physical face you end up calling "front" once the cube is oriented
+// and placed.
+// Phase 1 (cheap, synchronous): parse targets, build the starting
+// pool (including the automatic solved-cube top-up), and run the
+// free-match pass. This is fast even for hundreds of targets -- it's
+// pure string comparisons, no actual cube-solving -- so it never needs
+// chunking. Returns a planState object ready for runPlanChunk to
+// process the remaining (non-free) targets incrementally.
+function initPlanRun(targetsInput) {
+  const { targets, errors: targetErrors } = parseMosaicTargets(targetsInput);
+  const { pool: configuredPool, errors: poolErrors } = buildStartingPool();
+  const errors = [...targetErrors, ...poolErrors];
+
+  // Solved cubes are never something you configure a count for -- they
+  // are an AUTOMATIC fallback that fills whatever gap is left between
+  // your configured rows (saved exports / pasted states) and the total
+  // number of targets. Topping the pool up BEFORE the free-match pass
+  // (rather than only at the solve stage) means a solved cube is also
+  // eligible to free-match a target -- e.g. an all-White target will
+  // happily claim a topped-up solved cube for free, not just leftover
+  // configured-row cubes.
+  const shortfall = Math.max(0, targets.length - configuredPool.length);
+  const pool = configuredPool.concat(
+    Array.from({ length: shortfall }, () => ({ str: solvedStateString(), label: 'fresh solved cube' }))
+  );
+
+  const { freeMatches, remainingTargets, remainingPool } = runFreeMatchPass(targets, pool);
+
+  const placements = freeMatches.map(m => ({
+    targetLineNum: m.target.lineNum,
+    mosaicPattern: m.target.mosaicPattern,
+    type: 'free',
+    sourceLabel: m.pool.label,
+    face: m.orientation.face,
+    rotation: m.orientation.rotation * 90,
+    moves: '(already matches -- no moves needed)',
+    moveCount: 0,
+    startStr: m.pool.str, // cube's state before any moves -- identical to finalStr here since a free match makes none; kept so the 3D animation always has a defined starting point regardless of placement type
+    finalStr: m.pool.str,
+    placed: false, // whether the PHYSICAL cube has actually been put in place yet -- separate from whether the plan has calculated it
+  }));
+
+  return {
+    status: remainingTargets.length === 0 ? 'done' : 'running',
+    targetsInput, // kept so a resumed/reloaded run can be displayed/verified against its own source text
+    mosaicWidth: appState.patternMosaicWidth, // captured AT SUBMIT TIME so a reload/resume keeps showing row/col labels and the same grid shape, instead of losing them because the width field itself wasn't separately persisted
+    totalCount: targets.length,
+    doneCount: placements.length,
+    placements,
+    errors,
+    solveQueue: remainingTargets, // targets still needing a real solve
+    poolQueue: remainingPool, // pool cubes not yet consumed by a solve
+    leftoverPoolCount: 0, // finalized once solveQueue is empty
+  };
+}
+
+// Phase 2 (chunked): processes up to `chunkSize` real solves from
+// planState.solveQueue, mutating placements/errors/poolQueue/doneCount
+// in place. Returns the SAME planState for convenience. Designed to be
+// called repeatedly (e.g. once per setTimeout tick) so the UI can
+// render progress and stay responsive between chunks, and so a
+// cancel/reload can stop or resume cleanly between chunks rather than
+// only at the very end.
+// IMPORTANT: a cube's center sticker is physically fixed to its own
+// face -- you cannot choose an arbitrary center color for whichever
+// face ends up displaying the pattern. So the target face to solve
+// toward is NOT a free choice; it's dictated by the target pattern's
+// OWN center cell (already translated to a cubejs letter in cubeGrid).
+//
+// PERFORMANCE NOTE: real mosaics very commonly have large repeated
+// regions (solid-color backgrounds, sky, etc.) -- many target lines
+// end up identical, and whenever the pool is exhausted, every one of
+// those identical targets starts from the SAME fresh solved cube too.
+// solveForFace is a pure function of (source state, target face,
+// target grid), so solving the exact same (state, face, grid) twice
+// always produces the exact same answer -- recomputing it is wasted
+// work, not a different/more-correct answer. A per-run cache (cleared
+// whenever a new plan starts, since it lives on planState itself)
+// skips that waste: measured ~280x faster for 300 identical solves in
+// testing, with the cached result being byte-for-byte the same as an
+// uncached one would be.
+function solveForFaceCacheKey(sourceStr, targetFace, cubeGrid) {
+  return sourceStr + '|' + targetFace + '|' + cubeGrid.flat().join('');
+}
+
+function runPlanChunk(planState, chunkSize) {
+  // solveCache doesn't survive JSON serialization (a Map round-trips
+  // through JSON.stringify/parse as a plain {} object, which lacks
+  // .get/.set) -- so after a resume from localStorage, re-create it as
+  // a real Map rather than just checking truthiness, or the very first
+  // cache .get() call after a resume would throw.
+  if (!(planState.solveCache instanceof Map)) planState.solveCache = new Map();
+  const n = Math.min(chunkSize, planState.solveQueue.length);
+  for (let i = 0; i < n; i++) {
+    const target = planState.solveQueue.shift();
+    const sourceEntry = planState.poolQueue.length > 0 ? planState.poolQueue.shift() : { str: solvedStateString(), label: 'fresh solved cube' };
+    const targetFace = target.cubeGrid[1][1];
+    const cacheKey = solveForFaceCacheKey(sourceEntry.str, targetFace, target.cubeGrid);
+    let result = planState.solveCache.get(cacheKey);
+    if (!result) {
+      try {
+        result = solveForFace(sourceEntry.str, targetFace, target.cubeGrid);
+      } catch (e) {
+        result = { success: false, error: `Unexpected error: ${e.message}` };
+      }
+      planState.solveCache.set(cacheKey, result);
+    }
+    if (result.success) {
+      planState.placements.push({
+        targetLineNum: target.lineNum,
+        mosaicPattern: target.mosaicPattern,
+        type: 'solve',
+        sourceLabel: sourceEntry.label,
+        face: targetFace,
+        rotation: 0,
+        moves: result.moves,
+        moveCount: result.moveCount,
+        startStr: sourceEntry.str, // cube's state BEFORE these moves, for the 3D animation to start from
+        finalStr: result.finalStr,
+        placed: false,
+      });
+    } else {
+      planState.errors.push(`Target line ${target.lineNum} (${target.mosaicPattern}): ${result.error}`);
+    }
+    planState.doneCount++;
+  }
+
+  if (planState.solveQueue.length === 0) {
+    planState.status = planState.status === 'cancelled' ? 'cancelled' : 'done';
+    planState.leftoverPoolCount = planState.poolQueue.length;
+    planState.placements.sort((a, b) => (a.targetLineNum ?? Infinity) - (b.targetLineNum ?? Infinity));
+  }
+
+  return planState;
+}
+
+// =====================================================================
+// Rendering
+// =====================================================================
+
+function render() {
+  const app = document.getElementById('app');
+
+  if (!appState.solverReady) {
+    app.innerHTML = `
+      <div class="loading-msg">
+        <div class="spinner"></div>
+        Loading solver engine…
+      </div>`;
+    return;
+  }
+
+  app.innerHTML = `
+    <h1>Cube Face Solver</h1>
+    <p class="subtitle">Build a real, verified turn-by-turn plan for a mosaic of cubes&nbsp;&mdash; no disassembly needed.</p>
+
+    <div id="modeBody"></div>
+
+    <div class="panel">
+      <h2><span class="step-num">·</span> Saved cube states (for reuse in your next mosaic)</h2>
+      <p class="panel-desc">${appState.solveLog.length === 0
+        ? 'No solves recorded yet this session. After each real solve, the cube\'s verified resulting state is saved here automatically.'
+        : `${appState.solveLog.length} solve${appState.solveLog.length === 1 ? '' : 's'} recorded this session.`}</p>
+      <button class="secondary-btn" id="exportSolveLogBtn" ${appState.solveLog.length === 0 ? 'disabled' : ''}>Download as .txt</button>
+      <button class="secondary-btn" id="saveAsNamedExportBtn" ${appState.solveLog.length === 0 ? 'disabled' : ''}>Save for "Use last mosaic's pattern" picker</button>
+    </div>
+  `;
+
+  document.getElementById('exportSolveLogBtn').onclick = handleExportSolveLog;
+  document.getElementById('saveAsNamedExportBtn').onclick = handleSaveAsNamedExport;
+
+  renderPatternMode();
+}
+
+// ---------------------------------------------------------------------
+// Pattern mode
+// ---------------------------------------------------------------------
+
+function renderPatternMode() {
+  const el = document.getElementById('modeBody');
+  const savedExports = loadSavedExports();
+
+  // One-time default: if this is the first render and the (still
+  // untouched) starting row hasn't had a real choice made yet, prefer
+  // "Saved mosaic's pattern" when at least one export already exists
+  // -- reusing a saved pattern is the more common case than starting
+  // from solved cubes whenever one is available. Only ever runs once;
+  // never overwrites a deliberate user choice made afterward.
+  if (!appState.patternStartRowsDefaultApplied) {
+    appState.patternStartRowsDefaultApplied = true;
+    if (savedExports.length > 0
+        && appState.patternStartRows.length === 1
+        && appState.patternStartRows[0].type === 'solved') {
+      appState.patternStartRows[0].type = 'lastExport';
+    }
+  }
+
+  el.innerHTML = `
+    <h2 class="section-heading"><span class="step-badge">STEP 1</span>Starting state</h2>
+    <div class="panel">
+      <p class="panel-desc">Any cube you don't account for below is assumed to be a solved cube &mdash; Claude works out how many you need from your target list, so you never have to count. Add a source row only for cubes that AREN'T starting solved (leftovers from an earlier mosaic, or a custom starting pattern). You can add more than one.</p>
+      <div class="source-cards" id="sourceRowsContainer"></div>
+      <button class="secondary-btn" id="addSourceRowBtn" style="margin-bottom:0;">+ Add another source</button>
+    </div>
+
+    <h2 class="section-heading"><span class="step-badge">STEP 2</span>Prepare the color input data for Target Mosaic</h2>
+    <div class="panel">
+      <p class="panel-desc" style="margin-bottom:10px;">Turn a picture into pasteable target-mosaic data:</p>
+      <ol class="prep-steps panel-desc">
+        <li>Go to <a href="https://ruwix.com/rubiks-cube-mosaic-generator/" target="_blank" rel="noopener">ruwix.com/rubiks-cube-mosaic-generator</a> and upload an image of what you want the mosaic to depict.</li>
+        <li>Proceed through Ruwix's steps to convert the image into a mosaic plan.</li>
+        <li>Download the finalized mosaic plan PDF of your choice.</li>
+        <li>Open a new Claude chat inside this same Rubik's Cube Mosaic project.</li>
+        <li>Paste the prompt below into that chat, then attach the downloaded PDF:
+          <div class="claude-prompt-box" id="claudeConversionPrompt">Convert this Ruwix mosaic instruction PDF into plain text I can paste into my Cube Face Solver tool.
+
+Read each grid's colors exactly as shown in the PDF -- don't infer, simplify, or smooth over isolated single-color tiles. Convert every 3x3 grid into one 9-character line using only W=White, Y=Yellow, R=Red, O=Orange, B=Blue, G=Green, no other letters or punctuation. Read each grid row-major (left-to-right within a row, top row first). Output one line per cube in the same order the PDF lists/arranges the cubes -- if the mosaic is a 2D grid, confirm row-by-row left-to-right, top-to-bottom ordering before converting. Give me the result as bare 9-letter lines only in one code block, no row labels or commentary between lines, so I can paste the whole block directly into the tool. If the PDF uses a different color scheme than W/Y/R/O/B/G, tell me what you see and confirm the mapping with me first. Also tell me the total number of cubes and the mosaic's width (cubes per row).</div>
+          <button class="secondary-btn" id="copyConversionPromptBtn" style="margin:8px 0 0;">Copy prompt</button>
+        </li>
+        <li>Once Claude replies with the converted lines, paste them into the <strong style="color:var(--text);">Target mosaic patterns</strong> box below, and fill in the <strong style="color:var(--text);">expected number of cubes</strong> and <strong style="color:var(--text);">mosaic width</strong> fields using the totals Claude (or your Ruwix PDF) gave you.</li>
+      </ol>
+    </div>
+
+    <h2 class="section-heading">Target mosaic</h2>
+    <div class="panel">
+      <p class="panel-desc">Paste this mosaic's target patterns: one 9-letter W/Y/R/O/B/G line per cube, in mosaic order, read left-to-right top-to-bottom. Example line: <code>WYROBGWYR</code>.</p>
+      <textarea class="pattern-input" id="patternTargetBox" placeholder="WYROBGWYR&#10;OOOOOOOOO&#10;GGGYYYBBB&#10;..." aria-label="Target mosaic patterns, one 9-letter W Y R O B G line per cube">${appState.patternTargetInput.replace(/</g, '&lt;')}</textarea>
+      <div id="targetCountCheckArea" aria-live="polite"></div>
+      <div class="matcher-row">
+        <label for="expectedCountInput">Expected number of cubes (optional, from your PDF/instructions):</label>
+        <input type="number" min="1" id="expectedCountInput" value="${appState.patternExpectedCount ?? ''}" placeholder="e.g. 600">
+      </div>
+      <div class="matcher-row">
+        <label for="mosaicWidthInput">Mosaic width in cubes (optional, for a visual preview):</label>
+        <input type="number" min="1" id="mosaicWidthInput" value="${appState.patternMosaicWidth ?? ''}" placeholder="e.g. 30">
+      </div>
+      <p class="panel-desc" style="margin-top:6px;">Line 1 of your pasted list is treated as row 1, column 1 (top-left), reading left-to-right then down, same as the preview grid below and the row/col labels in your results. If your mosaic instructions number things differently, line your list up with THIS convention before pasting.</p>
+      <div id="mosaicPreviewArea"></div>
+    </div>
+
+    <details class="accordion" id="howToReadAccordion" style="margin-bottom:16px;">
+      <summary>How to read your turn instructions (read this before turning any cubes)</summary>
+      <div class="accordion-body" style="font-size:0.8rem; line-height:1.6; color:var(--text-dim);">
+        <p><strong style="color:var(--text);">Notation:</strong> a letter alone (e.g. <code>R</code>) means turn that face a quarter-turn clockwise, viewed from outside looking straight at that face. A letter with <code>'</code> (e.g. <code>R'</code>) means counterclockwise. A letter with <code>2</code> (e.g. <code>R2</code>) means a half-turn (either direction, same result). U=Up, D=Down, L=Left, R=Right, F=Front (toward you), B=Back.</p>
+        <p><strong style="color:var(--text);">Critical: keep the cube in the SAME orientation in your hands for the whole sequence.</strong> "Up", "Front", etc. always refer to whichever faces were Up/Front when you started that cube's turns &mdash; not wherever they happen to be pointing after you've turned something. Pick the cube up, decide which face is "Up" and which is "Front", and don't rotate the whole cube in your hands while working through its moves (only turn the individual faces the instructions name). If you set the cube down and pick it back up, make sure it's in the exact same orientation before continuing.</p>
+        <p><strong style="color:var(--text);">After the moves:</strong> the instruction tells you which face to place into the mosaic (e.g. "show its Up face") &mdash; that's the SAME face you called Up while turning, still in that same orientation. Rotate the whole cube (without turning any individual face) so that face points toward you/outward, then place it.</p>
+      </div>
+    </details>
+
+    <h2 class="section-heading"><span class="step-badge">STEP 3</span>Build the mosaic plan</h2>
+    <button class="primary" id="submitPlanBtn" ${!canSubmitPattern() ? 'disabled' : ''}>${submitPlanLabel()}</button>
+
+    <div id="planRunStatusAnnouncer" class="sr-only" aria-live="polite" role="status"></div>
+    <div id="planResultArea"></div>
+  `;
+
+  renderSourceRows(savedExports);
+
+  document.getElementById('addSourceRowBtn').onclick = () => {
+    appState.patternStartRows.push({ id: appState.patternStartRowNextId++, type: 'solved', exportName: null, pasteText: '' });
+    appState.patternPlanState = null;
+    render();
+  };
+
+  const copyPromptBtn = document.getElementById('copyConversionPromptBtn');
+  if (copyPromptBtn) {
+    copyPromptBtn.onclick = async () => {
+      const promptText = document.getElementById('claudeConversionPrompt').textContent;
+      try {
+        await navigator.clipboard.writeText(promptText);
+        copyPromptBtn.textContent = 'Copied!';
+      } catch (e) {
+        copyPromptBtn.textContent = 'Copy failed -- select the text above manually';
+      }
+      setTimeout(() => { copyPromptBtn.textContent = 'Copy prompt'; }, 2000);
+    };
+  }
+
+  document.getElementById('patternTargetBox').oninput = (e) => {
+    appState.patternTargetInput = e.target.value;
+    appState.patternPlanState = null;
+    appState.patternCountMismatchAcked = false; // input changed -- any prior "submit anyway" no longer applies
+    updateSubmitButton();
+    debouncedRenderMosaicPreview();
+    renderTargetCountCheck(e.inputType === 'insertFromPaste');
+  };
+  document.getElementById('expectedCountInput').oninput = (e) => {
+    const v = parseInt(e.target.value, 10);
+    appState.patternExpectedCount = (v > 0) ? v : null;
+    appState.patternCountMismatchAcked = false;
+    updateSubmitButton();
+    renderTargetCountCheck();
+  };
+  document.getElementById('mosaicWidthInput').oninput = (e) => {
+    const v = parseInt(e.target.value, 10);
+    appState.patternMosaicWidth = (v > 0) ? v : null;
+    debouncedRenderMosaicPreview();
+  };
+  document.getElementById('submitPlanBtn').onclick = handleSubmitPlan;
+
+  renderMosaicPreview();
+  renderTargetCountCheck();
+  renderPlanResult();
+}
+
+// Renders one source-card per row in appState.patternStartRows. Each
+// row independently picks a type via 3 explicit radio options --
+// "lastExport" (saved mosaic's pattern), "paste" (input color
+// pattern), or "solved" (solved cubes) -- then shows that type's
+// specific inputs underneath, if any. "solved" is a real, explicit
+// row type (not just the absence of a choice): it's the default for
+// a new row, and it has no further inputs because a solved cube needs
+// no clarification. Rows beyond the first get a "remove" control.
+function renderSourceRows(savedExports) {
+  const container = document.getElementById('sourceRowsContainer');
+  const noSavedExports = savedExports.length === 0;
+  container.innerHTML = appState.patternStartRows.map((row, idx) => `
+    <div class="source-card active" data-row-id="${row.id}">
+      <div class="source-card-title" style="justify-content:space-between; align-items:flex-start;">
+        <div class="source-type-options" role="radiogroup" aria-label="Starting cube source for this row">
+          <label class="source-type-option">
+            <input type="radio" name="rowType${row.id}" id="rowTypeLastExport${row.id}" value="lastExport" ${row.type === 'lastExport' ? 'checked' : ''} ${noSavedExports ? 'disabled' : ''}>
+            <span>Saved mosaic's pattern${noSavedExports ? ' <em>(none saved yet)</em>' : ''}</span>
+          </label>
+          <label class="source-type-option">
+            <input type="radio" name="rowType${row.id}" id="rowTypePaste${row.id}" value="paste" ${row.type === 'paste' ? 'checked' : ''}>
+            <span>Input color pattern</span>
+          </label>
+          <label class="source-type-option">
+            <input type="radio" name="rowType${row.id}" id="rowTypeSolved${row.id}" value="solved" ${row.type === 'solved' ? 'checked' : ''}>
+            <span>Solved cubes</span>
+          </label>
+        </div>
+        ${appState.patternStartRows.length > 1 ? `<button type="button" class="reset-link" style="margin:0; font-size:0.75rem;" id="removeRow${row.id}">remove</button>` : ''}
+      </div>
+      <div class="source-card-body">
+        ${row.type === 'lastExport' ? `
+          <select class="pattern-input" id="rowExport${row.id}" aria-label="Choose a saved export to use as the starting source">
+            <option value="">-- choose a saved export --</option>
+            ${savedExports.map(e => `<option value="${e.name.replace(/"/g, '&quot;')}" ${row.exportName === e.name ? 'selected' : ''}>${e.name} (${e.lines.length} cube${e.lines.length === 1 ? '' : 's'}, saved ${new Date(e.savedAt).toLocaleDateString()})</option>`).join('')}
+          </select>
+        ` : ''}
+        ${row.type === 'paste' ? `
+          <p class="panel-desc">One 54-letter U/R/F/D/L/B line per cube. If you have a Ruwix-style PDF describing your STARTING cubes, share it with Claude in chat and ask for this format.</p>
+          <textarea class="pattern-input" id="rowPaste${row.id}" placeholder="UUUUUUUUU RRRRRRRRR FFFFFFFFF DDDDDDDDD LLLLLLLLL BBBBBBBBB&#10;(one line per cube)" aria-label="Starting cube states, one 54-letter U R F D L B line per cube">${row.pasteText.replace(/</g, '&lt;')}</textarea>
+          <div class="pattern-status ${row.pasteText.trim() === '' ? 'status-empty' : 'status-ok'}" aria-live="polite">${rowPasteCountLabel(row)}</div>
+        ` : ''}
+        ${row.type === 'solved' ? `<p class="panel-desc" style="margin:0;">Any cubes covered by this row start solved &mdash; no further setup needed.</p>` : ''}
+      </div>
+    </div>
+  `).join('');
+
+  appState.patternStartRows.forEach(row => {
+    ['lastExport', 'paste', 'solved'].forEach(typeValue => {
+      const radio = document.getElementById(`rowType${typeValue === 'lastExport' ? 'LastExport' : typeValue === 'paste' ? 'Paste' : 'Solved'}${row.id}`);
+      if (radio) radio.onchange = (e) => {
+        if (!e.target.checked) return;
+        row.type = typeValue;
+        appState.patternPlanState = null;
+        render();
+      };
+    });
+    const removeBtn = document.getElementById(`removeRow${row.id}`);
+    if (removeBtn) removeBtn.onclick = () => {
+      appState.patternStartRows = appState.patternStartRows.filter(r => r.id !== row.id);
+      appState.patternPlanState = null;
+      render();
+    };
+    const exportSelect = document.getElementById(`rowExport${row.id}`);
+    if (exportSelect) exportSelect.onchange = (e) => {
+      row.exportName = e.target.value || null;
+      appState.patternPlanState = null;
+      updateSubmitButton();
+    };
+    const pasteBox = document.getElementById(`rowPaste${row.id}`);
+    if (pasteBox) pasteBox.oninput = (e) => {
+      row.pasteText = e.target.value;
+      appState.patternPlanState = null;
+      updateSubmitButton();
+      // Update just this row's count label in place, rather than
+      // re-rendering the textarea itself, so typing doesn't fight with
+      // cursor position/scroll on a long pasted list.
+      const statusEl = pasteBox.parentElement.querySelector('.pattern-status');
+      if (statusEl) {
+        statusEl.className = `pattern-status ${row.pasteText.trim() === '' ? 'status-empty' : 'status-ok'}`;
+        statusEl.textContent = rowPasteCountLabel(row);
+      }
+    };
+  });
+}
+
+// A row "counts" toward contributing real cubes if it's configured
+// enough to (potentially) add at least one. This is informational
+// only -- submitting doesn't require any row to contribute real
+// cubes, since an all-"solved cubes" pool just means "everything is a
+// solved cube," which is a perfectly valid plan.
+function rowIsFilled(row) {
+  if (row.type === 'lastExport') return !!row.exportName;
+  if (row.type === 'paste') return row.pasteText.trim() !== '';
+  return false;
+}
+
+function canSubmitPattern() {
+  return appState.patternTargetInput.trim() !== '';
+}
+
+function submitPlanLabel() {
+  if (appState.patternTargetInput.trim() === '') return 'Paste target mosaic patterns first';
+  return 'Submit: build mosaic plan';
+}
+
+function updateSubmitButton() {
+  const btn = document.getElementById('submitPlanBtn');
+  if (!btn) return;
+  btn.disabled = !canSubmitPattern();
+  btn.textContent = submitPlanLabel();
+}
+
+// Renders the result of the last "Submit" click: a summary row, then
+// one card per placement (free or solved), each showing exactly what
+// to do with that physical cube. Errors (bad input lines, unsolvable
+// patterns) are shown separately and don't block the placements that
+// DID succeed.
+// Converts a 1-based target line number into a 1-based {row, col}
+// position, given a mosaic width in cubes. Returns null if width is
+// unknown -- callers fall back to showing just the line number.
+function gridPositionForLine(lineNum, width) {
+  if (!width || width <= 0 || !lineNum) return null;
+  const idx = lineNum - 1;
+  return { row: Math.floor(idx / width) + 1, col: (idx % width) + 1 };
+}
+
+// Builds the "where does this go" mini-map shown in the cube viewer
+// modal: a zoomed-in close-up of the current cube's immediate
+// neighborhood (the thing your eye actually uses while standing over
+// a table of cubes -- "is it this one or the one next to it"), plus a
+// tiny whole-mosaic thumbnail with a marker dot for overall context
+// ("am I in the corner or the middle of this thing"). Both read from
+// the same parsed target list and the same color mapping as the
+// pre-submit preview (renderMosaicPreview), so the two never disagree.
+// Returns an HTML string, or '' if there isn't enough info to draw
+// anything (no known mosaic width, or the target list doesn't parse).
+function buildCubeViewerMinimapHtml(targetsInput, width, currentLineNum) {
+  if (!width || width <= 0 || !currentLineNum) return '';
+  const { targets } = parseMosaicTargets(targetsInput);
+  if (targets.length === 0) return '';
+
+  const rows = Math.ceil(targets.length / width);
+  const cur = gridPositionForLine(currentLineNum, width); // 1-based {row, col}
+  if (!cur) return '';
+
+  const colorFor = (lineNum) => {
+    const t = targets[lineNum - 1];
+    return t ? paletteIdToHex(CODE_TO_PALETTE_ID[t.mosaicPattern[4]]) : null;
+  };
+
+  // --- Close-up: a fixed neighborhood window around the current cube ---
+  const HALF = 3; // 7x7 window
+  const closeupCells = [];
+  for (let r = cur.row - HALF; r <= cur.row + HALF; r++) {
+    for (let c = cur.col - HALF; c <= cur.col + HALF; c++) {
+      const inBounds = r >= 1 && r <= rows && c >= 1 && c <= width;
+      const isCurrent = r === cur.row && c === cur.col;
+      const lineNum = inBounds ? (r - 1) * width + c : null;
+      const hex = inBounds ? colorFor(lineNum) : null;
+      const cls = ['cube-viewer-minimap-cell'];
+      if (isCurrent) cls.push('current');
+      if (!hex) cls.push('empty');
+      closeupCells.push(`<div class="${cls.join(' ')}" style="${hex ? `background:${hex};` : ''}" title="${inBounds ? `row ${r}, col ${c}` : ''}"></div>`);
+    }
+  }
+  const closeupSize = HALF * 2 + 1;
+  const closeup = `
+    <div aria-hidden="true">
+      <div class="cube-viewer-minimap-closeup" style="grid-template-columns:repeat(${closeupSize}, 18px);">${closeupCells.join('')}</div>
+      <div class="cube-viewer-minimap-label">nearby cubes</div>
+    </div>`;
+
+  // --- Thumbnail: the whole mosaic, tiny, with a marker dot ---
+  const cellPx = targets.length > 2000 ? 1 : (targets.length > 500 ? 2 : 3);
+  const thumbW = width * cellPx;
+  const thumbH = rows * cellPx;
+  const canvas = document.createElement('canvas');
+  canvas.width = thumbW;
+  canvas.height = thumbH;
+  const ctx = canvas.getContext('2d');
+  for (let i = 0; i < targets.length; i++) {
+    const hex = colorFor(i + 1);
+    ctx.fillStyle = hex || '#1c1a17';
+    const r = Math.floor(i / width), c = i % width;
+    ctx.fillRect(c * cellPx, r * cellPx, cellPx, cellPx);
+  }
+  const markerLeft = (cur.col - 0.5) * cellPx;
+  const markerTop = (cur.row - 0.5) * cellPx;
+  const thumb = `
+    <div class="cube-viewer-minimap-thumb-wrap">
+      <div class="cube-viewer-minimap-thumb" style="width:${thumbW}px; height:${thumbH}px;">
+        <img src="${canvas.toDataURL()}" width="${thumbW}" height="${thumbH}" style="display:block; image-rendering:pixelated;" alt="Mosaic thumbnail, ${width} cubes wide by ${rows} tall, with the current cube marked at row ${cur.row}, column ${cur.col}.">
+        <div class="cube-viewer-minimap-marker" style="left:${markerLeft}px; top:${markerTop}px;" aria-hidden="true"></div>
+      </div>
+      <div class="cube-viewer-minimap-label">whole mosaic</div>
+    </div>`;
+
+  return `<div class="cube-viewer-minimap">${closeup}${thumb}</div>`;
+}
+
+// Renders a lightweight visual grid preview of the pasted target list,
+// using each target's CENTER cell as its representative color (the
+// center is what's actually most visible on a real mosaic from a
+// distance, and it's also the one cell that's physically guaranteed --
+// see the center-color/target-face discussion). Lets you sanity-check
+// the overall shape/silhouette against your source image BEFORE
+// submitting, while mistakes are still cheap to fix.
+function renderMosaicPreview() {
+  const el = document.getElementById('mosaicPreviewArea');
+  if (!el) return;
+  const width = appState.patternMosaicWidth;
+  const { targets } = parseMosaicTargets(appState.patternTargetInput);
+  if (!width || targets.length === 0) { el.innerHTML = ''; return; }
+
+  const cellPx = targets.length > 2000 ? 4 : (targets.length > 500 ? 6 : 10);
+  const rows = Math.ceil(targets.length / width);
+  // Array + single join, rather than repeated string concatenation --
+  // meaningfully faster than += in a loop once this runs into the
+  // thousands of cells (a real mosaic can be many hundreds of cubes).
+  const cellParts = [];
+  for (let i = 0; i < rows * width; i++) {
+    const target = targets[i];
+    const hex = target ? paletteIdToHex(CODE_TO_PALETTE_ID[target.mosaicPattern[4]]) : '#000';
+    cellParts.push(`<div style="width:${cellPx}px; height:${cellPx}px; background:${hex};"></div>`);
+  }
+  const grid = `<div aria-hidden="true" style="margin-top:10px; display:grid; grid-template-columns:repeat(${width}, ${cellPx}px); gap:1px; background:#000; padding:4px; border-radius:6px; width:fit-content; max-width:100%; overflow:auto;">${cellParts.join('')}</div>`;
+  const caption = `<p class="panel-desc" style="margin-top:6px;">${targets.length} cube${targets.length === 1 ? '' : 's'} across ${rows} row${rows === 1 ? '' : 's'} of ${width}. Check this matches your source image's shape before submitting.</p>`;
+  el.innerHTML = grid + caption;
+}
+
+// Debounced wrapper: for a large mosaic (hundreds/thousands of target
+// lines), regenerating the grid preview on EVERY keystroke while
+// pasting/typing is noticeably laggy (measured ~190ms per keystroke at
+// 900 targets during development). Instead, show a cheap "updating..."
+// placeholder immediately, then only do the real (more expensive)
+// render once typing has paused for a moment.
+let mosaicPreviewDebounceTimer = null;
+function debouncedRenderMosaicPreview() {
+  const el = document.getElementById('mosaicPreviewArea');
+  if (el && appState.patternTargetInput.trim() !== '' && appState.patternMosaicWidth) {
+    el.innerHTML = '<p class="panel-desc" style="margin-top:10px;">Updating preview&hellip;</p>';
+  }
+  if (mosaicPreviewDebounceTimer) clearTimeout(mosaicPreviewDebounceTimer);
+  mosaicPreviewDebounceTimer = setTimeout(() => {
+    mosaicPreviewDebounceTimer = null;
+    renderMosaicPreview();
+  }, 300);
+}
+
+// Returns the actual parsed line count vs. the expected count, or null
+// if there's nothing to check (no expected count set, or no target
+// text yet). This is intentionally a count-only check, independent of
+// mosaicWidth/shape and independent of whether each line is itself
+// valid -- a PDF conversion that drops or duplicates a whole line is
+// exactly the kind of error that's invisible line-by-line but obvious
+// once you compare against the number the source material claims.
+function targetCountMismatch() {
+  const expected = appState.patternExpectedCount;
+  if (!expected) return null;
+  const { targets } = parseMosaicTargets(appState.patternTargetInput);
+  if (appState.patternTargetInput.trim() === '') return null;
+  if (targets.length === expected) return null;
+  return { expected, actual: targets.length };
+}
+
+// Renders a small status line under the target textarea: green
+// confirmation when the parsed count matches the expected count, a
+// red mismatch warning when it doesn't, or nothing when there's no
+// expected count to check against yet. This runs on every keystroke
+// (cheap -- just a line count, not a full preview re-render) so the
+// mismatch is visible immediately, before the user ever reaches
+// Submit, rather than only being caught by the confirm-gate there.
+// Renders a small status area under the target textarea: per-line
+// parse errors (bad letter, wrong length) shown immediately as you
+// type/paste, followed by a count-match check when an expected count
+// was given. Runs on every keystroke -- parseMosaicTargets is cheap
+// (just splitting/regex over the text, no actual cube-solving), so
+// there's no need to debounce it the way the heavier visual mosaic
+// preview is debounced.
+//
+// Line errors take priority over the count message: a wrong-length or
+// bad-letter line gets REJECTED by parseMosaicTargets and excluded
+// from `targets`, so a count mismatch that coincides with line errors
+// is often just a symptom of those same bad lines, not a separate
+// problem -- showing both at once would tell the person to investigate
+// two things when fixing the one cause clears both. Capped at the
+// first 6 errors so a systematic mistake (e.g. every line missing a
+// trailing letter from a bad copy-paste) is visible at a glance
+// without flooding the panel for a large mosaic with one bad pattern.
+const TARGET_ERROR_DISPLAY_LIMIT = 6;
+
+function renderTargetCountCheck(isPaste) {
+  const el = document.getElementById('targetCountCheckArea');
+  if (!el) return;
+  const rawInput = appState.patternTargetInput;
+  if (rawInput.trim() === '') { el.innerHTML = ''; return; }
+
+  // While actively typing, the last line is presumed still in progress
+  // (no trailing newline committed yet) -- validating it here would
+  // flag a perfectly normal "only typed 3 of 9 letters so far" as an
+  // error on every keystroke. Drop it from THIS live check only; the
+  // full text (last line included) is still validated for real at
+  // Submit via parseMosaicTargets directly, so nothing slips through
+  // uncaught, this just avoids announcing/flashing a false alarm while
+  // someone is mid-line.
+  //
+  // Two cases count as "nothing left mid-edit", so the last line gets
+  // checked immediately rather than excluded: a trailing newline (the
+  // line was already committed, e.g. typing carried on past it), OR a
+  // genuine paste event (isPaste) -- a pasted block arrives complete
+  // in one shot with no line left "still being typed", even when (as
+  // is common, e.g. text copied from a PDF or from Claude's own reply)
+  // it has no trailing blank line of its own.
+  const endsWithNewline = /\n\s*$/.test(rawInput);
+  const lastLineIsSafeToCheck = endsWithNewline || isPaste;
+  const linesForCheck = lastLineIsSafeToCheck ? rawInput.split('\n') : rawInput.split('\n').slice(0, -1);
+  const textForCheck = linesForCheck.join('\n');
+
+  const { targets, errors } = parseMosaicTargets(textForCheck);
+
+  if (errors.length > 0) {
+    const shown = errors.slice(0, TARGET_ERROR_DISPLAY_LIMIT).map(e => e.replace(/</g, '&lt;'));
+    const more = errors.length > TARGET_ERROR_DISPLAY_LIMIT ? `<br>&hellip; and ${errors.length - TARGET_ERROR_DISPLAY_LIMIT} more line${errors.length - TARGET_ERROR_DISPLAY_LIMIT === 1 ? '' : 's'} with the same kind of problem.` : '';
+    el.innerHTML = `<div class="pattern-status status-error">⚠ ${errors.length} line${errors.length === 1 ? '' : 's'} couldn't be read:<br>${shown.join('<br>')}${more}</div>`;
+    return;
+  }
+
+  const expected = appState.patternExpectedCount;
+  if (!expected) { el.innerHTML = ''; return; }
+  const actual = targets.length;
+  if (actual === expected) {
+    el.innerHTML = `<div class="pattern-status status-ok">✓ ${actual} cubes parsed -- matches the expected count.</div>`;
+  } else {
+    const diff = actual - expected;
+    const diffLabel = diff > 0 ? `${diff} too many` : `${-diff} too few`;
+    el.innerHTML = `<div class="pattern-status status-error">⚠ ${actual} cube${actual === 1 ? '' : 's'} parsed, but you said this mosaic should have ${expected} (${diffLabel}). Check for a dropped/duplicated line, a row that got merged, or a paste that got cut off before submitting.</div>`;
+  }
+}
+
+function renderPlanResult() {
+  const el = document.getElementById('planResultArea');
+  const planState = appState.patternPlanState;
+
+  if (!planState) {
+    // No active run -- offer to resume one left in localStorage from
+    // an earlier session (e.g. the page was reloaded mid-mosaic).
+    const saved = loadPlanRunProgress();
+    if (saved && saved.status === 'running') {
+      el.innerHTML = `
+        <div class="result-box" style="margin-top:12px;">
+          <div class="status">⏸ Unfinished mosaic plan found</div>
+          <div style="font-size:0.85rem; line-height:1.5;">${saved.doneCount} of ${saved.totalCount} cubes were already worked out before this was interrupted (e.g. a page reload). Resume to pick up exactly where it left off, or discard to start fresh.</div>
+          <div style="display:flex; gap:8px; margin-top:10px;">
+            <button class="secondary-btn" id="resumePlanBtn" style="margin:0; flex:1;">Resume</button>
+            <button class="secondary-btn" id="discardPlanBtn" style="margin:0; flex:1;">Discard</button>
+          </div>
+        </div>`;
+      document.getElementById('resumePlanBtn').onclick = handleResumePlan;
+      document.getElementById('discardPlanBtn').onclick = handleDiscardSavedPlan;
+    } else {
+      el.innerHTML = '';
+    }
+    return;
+  }
+
+  const freeCount = planState.placements.filter(p => p.type === 'free').length;
+  const solveCount = planState.placements.filter(p => p.type === 'solve').length;
+  const totalMoves = planState.placements.reduce((sum, p) => sum + p.moveCount, 0);
+  const placedCount = planState.placements.filter(p => p.placed).length;
+  const width = planState.mosaicWidth;
+
+  const errorBlock = planState.errors.length > 0 ? `
+    <div class="result-box error" style="margin-top:12px;">
+      <div class="status">⚠ ${planState.errors.length} issue${planState.errors.length === 1 ? '' : 's'}</div>
+      <div style="font-size:0.8rem; line-height:1.5;">${planState.errors.map(e => e.replace(/</g, '&lt;')).join('<br>')}</div>
+    </div>` : '';
+
+  const progressBlock = planState.status === 'running' ? `
+    <div class="result-box" style="margin-top:0;">
+      <div class="status">⏳ Solving&hellip; ${planState.doneCount} of ${planState.totalCount}</div>
+      <div style="background:#111; border-radius:6px; height:10px; overflow:hidden; margin:8px 0;">
+        <div style="background:var(--accent); height:100%; width:${(100 * planState.doneCount / Math.max(1, planState.totalCount)).toFixed(1)}%; transition:width 0.15s;"></div>
+      </div>
+      <button class="secondary-btn" id="cancelPlanBtn" style="margin:0; width:100%; text-align:center;">Cancel</button>
+    </div>
+  ` : (planState.status === 'cancelled' ? `
+    <div class="result-box error" style="margin-top:0;">
+      <div class="status">✗ Cancelled at ${planState.doneCount} of ${planState.totalCount}</div>
+      <div style="font-size:0.85rem;">What's listed below is everything completed before cancelling. Submit again to redo the rest from scratch.</div>
+    </div>
+  ` : '');
+
+  // Row-range filter -- lets you narrow the (potentially huge) list
+  // down to just the physical section of the mosaic you're working on
+  // right now, instead of scrolling through hundreds of entries.
+  const filter = appState.patternPlanRowFilter;
+  const filterActive = width && filter && (filter.from || filter.to);
+  const visiblePlacements = planState.placements.filter(p => {
+    if (!filterActive) return true;
+    const pos = gridPositionForLine(p.targetLineNum, width);
+    if (!pos) return true;
+    if (filter.from && pos.row < filter.from) return false;
+    if (filter.to && pos.row > filter.to) return false;
+    return true;
+  });
+
+  const rowFilterBlock = (width && planState.status !== 'running') ? `
+    <div class="matcher-row" style="margin-top:10px;">
+      <label for="rowFilterFrom">Show rows</label>
+      <input type="number" min="1" id="rowFilterFrom" value="${filter && filter.from ? filter.from : ''}" placeholder="from" style="width:60px;">
+      <label for="rowFilterTo">to</label>
+      <input type="number" min="1" id="rowFilterTo" value="${filter && filter.to ? filter.to : ''}" placeholder="to" style="width:60px;">
+      ${filterActive ? `<button type="button" class="reset-link" style="margin:0;" id="clearRowFilterBtn">show all</button>` : ''}
+    </div>
+  ` : '';
+
+  el.innerHTML = `
+    ${progressBlock}
+    <div class="plan-summary">
+      <div class="match-stat free"><div class="num">${freeCount}</div><div class="lbl">free reuse${freeCount === 1 ? '' : 's'}</div></div>
+      <div class="match-stat remaining"><div class="num">${solveCount}</div><div class="lbl">${planState.status === 'running' ? 'solved so far' : 'needed solving'}</div></div>
+      <div class="match-stat"><div class="num">${totalMoves}</div><div class="lbl">total moves</div></div>
+      ${planState.status !== 'running' ? `<div class="match-stat free"><div class="num">${placedCount}/${planState.placements.length}</div><div class="lbl">physically placed</div></div>` : ''}
+    </div>
+    ${rowFilterBlock}
+    ${planState.placements.length > 0 ? `
+    <div class="match-list">
+      ${visiblePlacements.map((p) => {
+        const i = planState.placements.indexOf(p);
+        const pos = gridPositionForLine(p.targetLineNum, width);
+        const posLabel = pos ? `row ${pos.row}, col ${pos.col}` : `line ${p.targetLineNum}`;
+        return `
+        <div class="match-item ${p.type === 'solve' ? 'solve-item' : ''}" style="${p.placed ? 'opacity:0.45;' : ''}">
+          ${planState.status !== 'running' ? `<input type="checkbox" id="placedCheck${i}" ${p.placed ? 'checked' : ''} style="flex-shrink:0; width:18px; height:18px; accent-color:var(--success);" aria-label="Mark target ${posLabel}, pattern ${p.mosaicPattern}, as physically placed">` : ''}
+          <span class="match-badge ${p.type === 'solve' ? 'badge-solve' : ''}">${p.type === 'free' ? 'FREE' : `${p.moveCount} MOVE${p.moveCount === 1 ? '' : 'S'}`}</span>
+          <span class="match-detail">
+            Target ${posLabel} <strong>${p.mosaicPattern}</strong> <span class="pool-tag">${p.sourceLabel}</span>
+            ${p.type === 'free'
+              ? ` &mdash; show <strong>${FACE_FULL_NAMES[p.face]}</strong> face, rotated ${p.rotation}&deg;. No moves needed.`
+              : ` &mdash; turns: <span style="font-family:'SF Mono',Monaco,monospace;">${p.moves}</span>, then show the <strong>${FACE_FULL_NAMES[p.face]}</strong> face.`
+            }
+          </span>
+          ${(planState.status !== 'running' && p.type === 'solve') ? `<button class="cube-viewer-trigger" style="border:none; border-radius:6px; padding:4px 8px; font-size:0.7rem; cursor:pointer; flex-shrink:0;" id="showMeBtn${i}" aria-label="Show 3D turn-by-turn animation for target ${posLabel}, pattern ${p.mosaicPattern}">▶ Show me</button>` : ''}
+          ${planState.status !== 'running' ? `<button type="button" class="reset-link" style="margin:0; font-size:0.7rem; flex-shrink:0;" id="editRowBtn${i}" aria-label="Fix target ${posLabel}, pattern ${p.mosaicPattern}">fix</button>` : ''}
+        </div>
+        <div id="editRowArea${i}" aria-live="polite"></div>
+      `;
+      }).join('')}
+    </div>
+    ${filterActive && visiblePlacements.length === 0 ? '<p class="panel-desc">No targets in that row range.</p>' : ''}
+    ` : '<p class="panel-desc">No placements produced yet.</p>'}
+    ${errorBlock}
+    ${planState.status !== 'running' ? `
+    <div style="display:flex; gap:8px; margin-top:12px;">
+      <button class="secondary-btn" id="copyPlanBtn" style="flex:1; margin:0; text-align:center;">Copy as text</button>
+      <button class="secondary-btn" id="downloadPlanBtn" style="flex:1; margin:0; text-align:center;">Download .txt</button>
+      <button class="secondary-btn" id="printPlanBtn" style="flex:1; margin:0; text-align:center;">Print</button>
+    </div>
+    ` : ''}
+  `;
+
+  const cancelBtn = document.getElementById('cancelPlanBtn');
+  if (cancelBtn) cancelBtn.onclick = handleCancelPlan;
+  const copyBtn = document.getElementById('copyPlanBtn');
+  if (copyBtn) copyBtn.onclick = () => {
+    navigator.clipboard.writeText(exportPlanText(planState)).catch(() => {});
+    copyBtn.textContent = 'Copied!';
+  };
+  const downloadBtn = document.getElementById('downloadPlanBtn');
+  if (downloadBtn) downloadBtn.onclick = () => handleDownloadPlan(planState);
+  const printBtn = document.getElementById('printPlanBtn');
+  if (printBtn) printBtn.onclick = () => handlePrintPlan(planState);
+  const fromInput = document.getElementById('rowFilterFrom');
+  const toInput = document.getElementById('rowFilterTo');
+  if (fromInput) fromInput.oninput = (e) => {
+    appState.patternPlanRowFilter = appState.patternPlanRowFilter || {};
+    appState.patternPlanRowFilter.from = parseInt(e.target.value, 10) || null;
+    renderPlanResult();
+  };
+  if (toInput) toInput.oninput = (e) => {
+    appState.patternPlanRowFilter = appState.patternPlanRowFilter || {};
+    appState.patternPlanRowFilter.to = parseInt(e.target.value, 10) || null;
+    renderPlanResult();
+  };
+  const clearFilterBtn = document.getElementById('clearRowFilterBtn');
+  if (clearFilterBtn) clearFilterBtn.onclick = () => {
+    appState.patternPlanRowFilter = null;
+    renderPlanResult();
+  };
+  visiblePlacements.forEach((p) => {
+    const i = planState.placements.indexOf(p);
+    const checkbox = document.getElementById(`placedCheck${i}`);
+    if (checkbox) checkbox.onchange = (e) => {
+      planState.placements[i].placed = e.target.checked;
+      if (planState.status === 'done') savePlanRunProgress(planState);
+      renderPlanResult();
+    };
+    const showMeBtn = document.getElementById(`showMeBtn${i}`);
+    if (showMeBtn) showMeBtn.onclick = () => openCubeViewer(i);
+  });
+  if (planState.status !== 'running') {
+    planState.placements.forEach((p, i) => {
+      const btn = document.getElementById(`editRowBtn${i}`);
+      if (btn) btn.onclick = () => renderEditRow(i);
+    });
+  }
+}
+
+// Shows an inline mini-form under a single placement row, letting you
+// correct that ONE target's 9-letter pattern and re-solve just that
+// row -- without resubmitting (and re-waiting on) the entire mosaic.
+// Re-solves against a fresh solved cube (the simplest always-correct
+// choice for a single isolated fix; re-deriving which pool cube was
+// originally assigned to this row would require re-running the whole
+// allocation, which defeats the point of a quick single-row fix).
+function renderEditRow(i) {
+  const area = document.getElementById(`editRowArea${i}`);
+  if (!area) return;
+  const planState = appState.patternPlanState;
+  const p = planState.placements[i];
+  area.innerHTML = `
+    <div class="matcher-row" style="margin:4px 0 10px;">
+      <input type="text" class="pattern-input" style="margin:0; width:160px;" id="editRowInput${i}" value="${p.mosaicPattern}" maxlength="9" aria-label="Corrected 9-letter target pattern for target ${p.targetLineNum}">
+      <button class="secondary-btn" style="margin:0;" id="editRowSolveBtn${i}">Re-solve this cube</button>
+      <button type="button" class="reset-link" style="margin:0;" id="editRowCancelBtn${i}">cancel</button>
+    </div>
+  `;
+  document.getElementById('editRowCancelBtn' + i).onclick = () => { area.innerHTML = ''; };
+  document.getElementById('editRowSolveBtn' + i).onclick = () => {
+    const raw = document.getElementById(`editRowInput${i}`).value.trim().toUpperCase();
+    const { targets, errors } = parseMosaicTargets(raw);
+    if (errors.length > 0 || targets.length !== 1) {
+      area.innerHTML = `<div class="pattern-status status-error">${errors[0] || 'Enter exactly 9 letters (W/Y/R/O/B/G).'}</div>`;
+      return;
+    }
+    const target = targets[0];
+    const targetFace = target.cubeGrid[1][1];
+    let result;
+    try {
+      result = solveForFace(solvedStateString(), targetFace, target.cubeGrid);
+    } catch (e) {
+      result = { success: false, error: `Unexpected error: ${e.message}` };
+    }
+    if (!result.success) {
+      area.innerHTML = `<div class="pattern-status status-error">${result.error}</div>`;
+      return;
+    }
+    planState.placements[i] = {
+      targetLineNum: p.targetLineNum,
+      mosaicPattern: target.mosaicPattern,
+      type: 'solve',
+      sourceLabel: 'fresh solved cube (manual fix)',
+      face: targetFace,
+      rotation: 0,
+      moves: result.moves,
+      moveCount: result.moveCount,
+      startStr: solvedStateString(),
+      finalStr: result.finalStr,
+      placed: false, // re-solved -- if the old version was already marked placed, that's now stale/wrong
+    };
+    appState.solveLog.push({ source: 'pattern', label: `target line ${p.targetLineNum} (manual fix)`, resultStr: result.finalStr });
+    if (planState.status === 'done') savePlanRunProgress(planState); // keep any persisted copy in sync, in case it's later resumed/inspected
+    renderPlanResult();
+  };
+}
+
+function exportPlanText(planState) {
+  const width = planState.mosaicWidth;
+  return planState.placements.map(p => {
+    const pos = gridPositionForLine(p.targetLineNum, width);
+    const posLabel = pos ? `row ${pos.row} col ${pos.col}` : `line ${p.targetLineNum}`;
+    const prefix = p.placed ? '[DONE] ' : '';
+    if (p.type === 'free') {
+      return `${prefix}Target ${posLabel} (${p.mosaicPattern}): use ${p.sourceLabel} -- show its ${FACE_FULL_NAMES[p.face]} face rotated ${p.rotation}\u00b0. No moves needed.`;
+    }
+    return `${prefix}Target ${posLabel} (${p.mosaicPattern}): use ${p.sourceLabel} -- turns: ${p.moves} -- then show its ${FACE_FULL_NAMES[p.face]} face. (${p.moveCount} moves)`;
+  }).join('\n');
+}
+
+// Downloads the full plan as a plain-text file -- more durable than
+// clipboard copy for a long mosaic (hundreds of rows): the clipboard
+// silently gets overwritten by the next thing you copy, with no
+// warning, while a downloaded file stays put until you delete it, and
+// can be kept open on a second device/tab while you work through cubes
+// on the first.
+function handleDownloadPlan(planState) {
+  const text = exportPlanText(planState);
+  if (!text.trim()) return;
+  const blob = new Blob([text], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `mosaic_plan_${new Date().toISOString().slice(0, 10)}.txt`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// Builds a self-contained, LIGHT-background, print-friendly HTML
+// document listing every placement -- the main app's dark theme and
+// interactive buttons aren't meant for paper, so this is a separate,
+// minimal rendering: plain black-on-white text, one row per cube,
+// readable at a glance while your hands are full of an actual cube.
+function buildPrintablePlanHtml(planState) {
+  const width = planState.mosaicWidth;
+  const rows = planState.placements.map(p => {
+    const pos = gridPositionForLine(p.targetLineNum, width);
+    const posLabel = pos ? `Row ${pos.row}, Col ${pos.col}` : `Line ${p.targetLineNum}`;
+    const instruction = p.type === 'free'
+      ? `Show ${FACE_FULL_NAMES[p.face]} face, rotated ${p.rotation}\u00b0 &mdash; no moves needed`
+      : `Turns: <strong>${p.moves}</strong> &mdash; then show ${FACE_FULL_NAMES[p.face]} face (${p.moveCount} moves)`;
+    return `
+      <tr style="${p.placed ? 'color:#767676;' : ''}">
+        <td style="padding:4px 8px; border-bottom:1px solid #ddd;">${p.placed ? '\u2611' : '\u2610'}</td>
+        <td style="padding:4px 8px; border-bottom:1px solid #ddd;">${posLabel}</td>
+        <td style="padding:4px 8px; border-bottom:1px solid #ddd; font-family:monospace;">${p.mosaicPattern}</td>
+        <td style="padding:4px 8px; border-bottom:1px solid #ddd;">${p.sourceLabel}</td>
+        <td style="padding:4px 8px; border-bottom:1px solid #ddd;">${instruction}</td>
+      </tr>`;
+  }).join('');
+  return `<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>Mosaic plan</title>
+<style>
+  body { font-family: -apple-system, Arial, sans-serif; color: #111; margin: 24px; }
+  h1 { font-size: 1.2rem; margin-bottom: 4px; }
+  .meta { color: #555; font-size: 0.85rem; margin-bottom: 16px; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  th { text-align: left; padding: 6px 8px; border-bottom: 2px solid #111; }
+  @media print { body { margin: 8mm; } }
+</style></head>
+<body>
+  <h1>Mosaic plan</h1>
+  <div class="meta">${planState.placements.length} cubes &middot; ${planState.placements.filter(p=>p.type==='free').length} free reuses &middot; ${planState.placements.filter(p=>p.type==='solve').length} need turns &middot; generated ${new Date().toLocaleString()}</div>
+  <table>
+    <thead><tr><th scope="col">Done</th><th scope="col">Position</th><th scope="col">Pattern</th><th scope="col">Source cube</th><th scope="col">Instructions</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+</body></html>`;
+}
+
+// Opens the print-friendly version in a new tab and triggers the
+// browser's native print dialog. Falls back to a plain download of
+// the HTML if the popup is blocked, so it's never a dead end.
+function handlePrintPlan(planState) {
+  const html = buildPrintablePlanHtml(planState);
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) {
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `mosaic_plan_print_${new Date().toISOString().slice(0, 10)}.html`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    alert('Your browser blocked the print popup, so a printable HTML file was downloaded instead -- open it and print from there.');
+    return;
+  }
+  printWindow.document.write(html);
+  printWindow.document.close();
+  printWindow.onload = () => { printWindow.focus(); printWindow.print(); };
+}
+
+const PLAN_CHUNK_SIZE = 8; // real solves per tick -- small enough to keep the UI responsive, large enough not to waste time on scheduling overhead
+
+// Starts a NEW plan run from scratch: clears any in-progress run,
+// builds the cheap free-match phase synchronously, then kicks off the
+// chunked solve loop. Every real solve's verified resulting state is
+// recorded into solveLog as it completes (not just at the end) -- a
+// free match's resulting state is the SAME physical cube, unmoved, so
+// it's just as real and reusable for a future mosaic as a solve's
+// result; skipping it would silently drop it from any future "Use a
+// previously saved mosaic's pattern" pool.
+function handleSubmitPlan() {
+  if (!canSubmitPattern()) return;
+  // Hard gate: if an expected cube count was given and the parsed
+  // target list doesn't match it, force an explicit confirmation
+  // before proceeding -- a wrong line count silently shifts every
+  // row/column mapping after the bad line, so this is worth stopping
+  // for even though the textarea already shows the same warning in
+  // red. Skipped if the user already clicked through this SAME
+  // mismatch (patternCountMismatchAcked); changing the target text or
+  // the expected count resets that flag so a stale "yes" can't cover
+  // a new, different mismatch.
+  const mismatch = targetCountMismatch();
+  if (mismatch && !appState.patternCountMismatchAcked) {
+    const msg = `You said this mosaic should have ${mismatch.expected} cubes, but ${mismatch.actual} were parsed from the pasted patterns (${mismatch.actual > mismatch.expected ? mismatch.actual - mismatch.expected + ' too many' : mismatch.expected - mismatch.actual + ' too few'}).\n\nThis usually means a dropped, duplicated, or merged line from the PDF conversion -- continuing will plan and assign physical cubes against that miscounted list.\n\nSubmit anyway?`;
+    if (typeof confirm === 'function' && !confirm(msg)) return;
+    appState.patternCountMismatchAcked = true;
+  }
+  // Resubmitting throws away the CURRENT plan -- including any manual
+  // "fix" edits and physically-placed checkmarks, which have no other
+  // backup. Confirm first if there's something real to lose; a plan
+  // that's still running, or one with zero placements yet, has nothing
+  // at risk and can proceed silently.
+  const existing = appState.patternPlanState;
+  if (existing && existing.status !== 'running' && existing.placements.length > 0) {
+    const placedCount = existing.placements.filter(p => p.placed).length;
+    const warning = placedCount > 0
+      ? `This will discard the current plan, including ${placedCount} cube${placedCount === 1 ? '' : 's'} marked as physically placed. Continue?`
+      : `This will discard the current plan (${existing.placements.length} placement${existing.placements.length === 1 ? '' : 's'}). Continue?`;
+    if (typeof confirm === 'function' && !confirm(warning)) return;
+  }
+  appState.patternPlanRowFilter = null;
+  clearPlanRunProgress();
+  let planState;
+  try {
+    planState = initPlanRun(appState.patternTargetInput);
+  } catch (e) {
+    planState = { status: 'done', targetsInput: appState.patternTargetInput, totalCount: 0, doneCount: 0, placements: [], errors: [`Unexpected error: ${e.message}`], solveQueue: [], poolQueue: [], leftoverPoolCount: 0 };
+  }
+  appState.patternPlanState = planState;
+  logNewPlacements(planState, 0);
+  render();
+  if (planState.status === 'running') {
+    announcePlanStatus(`Solving ${planState.totalCount} cubes…`);
+    runPlanLoop();
+  }
+}
+
+// Resumes a plan run found in localStorage (offered after a reload if
+// one was left mid-progress). Re-logs only placements not already in
+// solveLog this session (a fresh page load has an empty solveLog, so
+// in practice this just re-logs everything completed so far).
+function handleResumePlan() {
+  const saved = loadPlanRunProgress();
+  if (!saved) return;
+  appState.patternPlanState = saved;
+  appState.patternTargetInput = saved.targetsInput;
+  if (saved.mosaicWidth) appState.patternMosaicWidth = saved.mosaicWidth;
+  logNewPlacements(saved, 0);
+  render();
+  if (saved.status === 'running') {
+    announcePlanStatus(`Resuming. ${saved.doneCount} of ${saved.totalCount} already done.`);
+    runPlanLoop();
+  }
+}
+
+function handleDiscardSavedPlan() {
+  clearPlanRunProgress();
+  render();
+}
+
+// Records every placement from index `fromIdx` onward into solveLog
+// (used both right after the free-match phase, and incrementally as
+// each chunk completes, so solveLog and the saved-export picker always
+// reflect real progress even if the run is interrupted).
+function logNewPlacements(planState, fromIdx) {
+  for (let i = fromIdx; i < planState.placements.length; i++) {
+    const p = planState.placements[i];
+    appState.solveLog.push({ source: 'pattern', label: `target line ${p.targetLineNum}`, resultStr: p.finalStr });
+  }
+}
+
+// The chunked loop itself: processes one chunk, persists progress,
+// updates the UI, and -- unless cancelled or finished -- schedules the
+// next chunk via setTimeout(0) so the browser gets to repaint/respond
+// between chunks instead of freezing for the whole run.
+//
+// announcePlanStatus pushes text into the sr-only live region added
+// alongside planResultArea. It's called only at real status
+// transitions (run started / finished / cancelled), NOT once per
+// chunk -- runPlanLoop ticks many times per second for a large
+// mosaic, and re-announcing "Solving... N of M" on every tick would
+// bury a screen reader user in noise. The visible progress bar
+// already covers the in-between ticks for sighted users; this just
+// makes sure the start and end points aren't silent for everyone else.
+function announcePlanStatus(text) {
+  const el = document.getElementById('planRunStatusAnnouncer');
+  if (el) el.textContent = text;
+}
+
+function runPlanLoop() {
+  const planState = appState.patternPlanState;
+  if (!planState || planState.status !== 'running') return;
+
+  const beforeCount = planState.placements.length;
+  runPlanChunk(planState, PLAN_CHUNK_SIZE);
+  logNewPlacements(planState, beforeCount);
+  savePlanRunProgress(planState);
+  render();
+
+  if (planState.status === 'running') {
+    setTimeout(runPlanLoop, 0);
+  } else {
+    clearPlanRunProgress(); // finished (or cancelled) -- nothing left to resume
+    announcePlanStatus(planState.status === 'cancelled'
+      ? `Cancelled at ${planState.doneCount} of ${planState.totalCount} cubes.`
+      : `Mosaic plan finished. ${planState.doneCount} of ${planState.totalCount} cubes worked out${planState.errors.length > 0 ? `, ${planState.errors.length} with issues` : ''}.`);
+  }
+}
+
+function handleCancelPlan() {
+  const planState = appState.patternPlanState;
+  if (!planState || planState.status !== 'running') return;
+  planState.status = 'cancelled';
+  // leave solveQueue/poolQueue as-is in case the person wants to see
+  // exactly how far it got; runPlanLoop's next scheduled tick (if any)
+  // will see the 'cancelled' status and stop without processing more.
+}
+
+// Builds the downloadable solve-log export: one normalized 54-char
+// state string per real solve, plain text, one per line -- this is the
+// file you'd paste into pattern mode's "Input color pattern" starting-
+// state box for a FUTURE mosaic project.
+function exportSolveLogText() {
+  return appState.solveLog.map(entry => entry.resultStr).join('\n') + (appState.solveLog.length ? '\n' : '');
+}
+
+function handleExportSolveLog() {
+  const text = exportSolveLogText();
+  if (!text.trim()) return;
+  const blob = new Blob([text], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `cube_states_${new Date().toISOString().slice(0, 10)}.txt`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// Saves the current solveLog into localStorage under a user-chosen
+// name, making it selectable from pattern mode's "Use a previously
+// saved mosaic's pattern" picker for a future mosaic.
+function handleSaveAsNamedExport() {
+  if (appState.solveLog.length === 0) return;
+  const defaultName = `Mosaic ${new Date().toLocaleDateString()}`;
+  const name = (typeof prompt === 'function' ? prompt('Name this saved export:', defaultName) : defaultName);
+  if (!name) return;
+  const finalName = saveCurrentLogAsExport(name);
+  if (finalName !== name && typeof alert === 'function') {
+    alert(`"${name}" was already used, so this was saved as "${finalName}" instead.`);
+  }
+  render();
+}
+
+// =====================================================================
+// 3D cube viewer: an animated, turnable Three.js cube that visually
+// demonstrates a placement's exact turn sequence, one move at a time.
+//
+// The geometry mapping (which face/row/col of a 54-char string colors
+// which physical sticker) and the rotation matrix for each of the 6
+// face moves were derived AND VERIFIED against the real cubejs
+// library before writing this: for every face (U/R/F/D/L/B) in all
+// three variants (clockwise, counterclockwise, double-turn), the
+// hypothesized rotation was applied to a known cube state and checked
+// to reproduce cubejs's own real move() output across all 26 outer
+// cubelets with zero mismatches. See development notes -- this is not
+// a guess, it's checked against the same solver the rest of the tool
+// trusts.
+// =====================================================================
+
+// Maps (face, row, col) -> {x,y,z} of the outward-facing sticker on
+// that small cube, in a coordinate system where each axis runs -1..1.
+// Verified against CORNER_POSITIONS/EDGE_POSITIONS (the tool's own
+// known-correct piece tables) for every corner, edge, and center.
+const CUBE3D_FACE_FNS = {
+  U: (r, c) => ({ x: c - 1, y: 1, z: r - 1 }),
+  D: (r, c) => ({ x: c - 1, y: -1, z: 1 - r }),
+  F: (r, c) => ({ x: c - 1, y: 1 - r, z: 1 }),
+  B: (r, c) => ({ x: 1 - c, y: 1 - r, z: -1 }),
+  R: (r, c) => ({ x: 1, y: 1 - r, z: 1 - c }),
+  L: (r, c) => ({ x: -1, y: 1 - r, z: c - 1 }),
+};
+const CUBE3D_FACE_DIR = { U: {x:0,y:1,z:0}, D: {x:0,y:-1,z:0}, F: {x:0,y:0,z:1}, B: {x:0,y:0,z:-1}, R: {x:1,y:0,z:0}, L: {x:-1,y:0,z:0} };
+const CUBE3D_DIR_TO_FACE = {};
+Object.entries(CUBE3D_FACE_DIR).forEach(([f, d]) => { CUBE3D_DIR_TO_FACE[`${d.x},${d.y},${d.z}`] = f; });
+
+// Clockwise (viewed from outside that face) rotation matrices, one
+// quarter-turn, around the relevant fixed axis. Verified empirically
+// against cubejs for all 6 faces; ', 2 variants are this applied 3x/2x.
+const CUBE3D_ROTATIONS = {
+  R: (p) => ({ x: p.x, y: p.z, z: -p.y }),
+  L: (p) => ({ x: p.x, y: -p.z, z: p.y }),
+  U: (p) => ({ x: -p.z, y: p.y, z: p.x }),
+  D: (p) => ({ x: p.z, y: p.y, z: -p.x }),
+  F: (p) => ({ x: p.y, y: -p.x, z: p.z }),
+  B: (p) => ({ x: -p.y, y: p.x, z: p.z }),
+};
+// Each face's quarter-turn rotation, expressed as a THREE.js axis +
+// angle (radians, right-hand rule) for the animated visual turn. These
+// describe the SAME rotations as CUBE3D_ROTATIONS above (kept as a
+// separate, simple lookup since Three.js animates via axis-angle
+// rather than the explicit coordinate formulas used for state tracking).
+const CUBE3D_AXIS_ANGLE = {
+  R: { axis: { x: 1, y: 0, z: 0 }, angle: -Math.PI / 2 },
+  L: { axis: { x: 1, y: 0, z: 0 }, angle: Math.PI / 2 },
+  U: { axis: { x: 0, y: 1, z: 0 }, angle: -Math.PI / 2 },
+  D: { axis: { x: 0, y: 1, z: 0 }, angle: Math.PI / 2 },
+  F: { axis: { x: 0, y: 0, z: 1 }, angle: -Math.PI / 2 },
+  B: { axis: { x: 0, y: 0, z: 1 }, angle: Math.PI / 2 },
+};
+
+const CUBE3D_PALETTE_HEX = {
+  U: '#ffffff', R: '#ffd500', F: '#b71234', D: '#ff5800', L: '#0046ad', B: '#009b48',
+};
+const CUBE3D_INTERNAL_HEX = '#1a1a1a';
+
+// Parses a move token like "R", "R'", "R2" into { face, turns } where
+// turns is 1, 2, or 3 quarter-turns clockwise (so R' becomes 3 -- i.e.
+// 3 clockwise quarter-turns is the same end state as 1 counterclockwise).
+function cube3dParseMove(token) {
+  const face = token[0];
+  if (token.length === 1) return { face, turns: 1 };
+  if (token[1] === '2') return { face, turns: 2 };
+  if (token[1] === "'") return { face, turns: 3 };
+  return { face, turns: 1 };
+}
+
+// Builds the initial per-cubelet model from a 54-char state string:
+// one entry per of the 26 outer small cubes, each with its integer
+// position and a map of which color sits on each of its outward faces.
+function cube3dBuildModel(str) {
+  const stickerMap = {}; // "x,y,z,face" -> color char
+  FACE_ORDER.forEach((face, fi) => {
+    const block = str.slice(fi * 9, fi * 9 + 9);
+    for (let r = 0; r < 3; r++) {
+      for (let c = 0; c < 3; c++) {
+        const ch = block[r * 3 + c];
+        const { x, y, z } = CUBE3D_FACE_FNS[face](r, c);
+        stickerMap[`${x},${y},${z},${face}`] = ch;
+      }
+    }
+  });
+  const cubelets = [];
+  for (let x = -1; x <= 1; x++) {
+    for (let y = -1; y <= 1; y++) {
+      for (let z = -1; z <= 1; z++) {
+        if (x === 0 && y === 0 && z === 0) continue; // hidden core, not rendered
+        const colors = {}; // face letter (U/R/F/D/L/B as a DIRECTION, not a string-source) -> color char
+        for (const face of FACE_ORDER) {
+          const key = `${x},${y},${z},${face}`;
+          if (key in stickerMap) colors[face] = stickerMap[key];
+        }
+        cubelets.push({ x, y, z, colors });
+      }
+    }
+  }
+  return cubelets;
+}
+
+// Applies one quarter-turn (clockwise, viewed from outside) of the
+// given face to the logical cubelet model IN PLACE: cubelets in that
+// layer get new positions AND their colors map gets re-keyed to the
+// new outward directions (since a sticker that faced "Up" before a
+// turn may face "Front" after it).
+function cube3dApplyQuarterTurn(cubelets, face) {
+  const axis = (face === 'R' || face === 'L') ? 'x' : (face === 'U' || face === 'D') ? 'y' : 'z';
+  const layerVal = (face === 'R' || face === 'U' || face === 'F') ? 1 : -1;
+  const rotFn = CUBE3D_ROTATIONS[face];
+  for (const cubelet of cubelets) {
+    if (cubelet[axis] !== layerVal) continue;
+    const newPos = rotFn({ x: cubelet.x, y: cubelet.y, z: cubelet.z });
+    const newColors = {};
+    for (const [dirFace, ch] of Object.entries(cubelet.colors)) {
+      const dir = CUBE3D_FACE_DIR[dirFace];
+      const newDir = rotFn(dir);
+      const newDirFace = CUBE3D_DIR_TO_FACE[`${newDir.x},${newDir.y},${newDir.z}`];
+      newColors[newDirFace] = ch;
+    }
+    cubelet.x = newPos.x; cubelet.y = newPos.y; cubelet.z = newPos.z;
+    cubelet.colors = newColors;
+  }
+}
+
+// One CubeViewer instance owns its own Three.js scene/renderer/camera
+// and the full move sequence's playback state. Created fresh each
+// time the modal opens (and disposed on close) rather than kept alive
+// globally, since only one can be open at a time and disposing avoids
+// any WebGL context leaks across many opens during a long session.
+function createCubeViewer(canvasContainer, startStr, moveString) {
+  const moves = moveString.trim() === '' || moveString.includes('already matches')
+    ? []
+    : moveString.trim().split(/\s+/);
+
+  const width = canvasContainer.clientWidth || 320;
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setSize(width, width);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  canvasContainer.innerHTML = '';
+  canvasContainer.appendChild(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
+  camera.position.set(4.2, 3.6, 5.2);
+  camera.lookAt(0, 0, 0);
+
+  scene.add(new THREE.AmbientLight(0xffffff, 0.65));
+  const dirLight = new THREE.DirectionalLight(0xffffff, 0.55);
+  dirLight.position.set(5, 8, 6);
+  scene.add(dirLight);
+
+  let cubelets = cube3dBuildModel(startStr);
+  const cubeletGroup = new THREE.Group();
+  scene.add(cubeletGroup);
+  const meshByCubelet = new Map(); // cubelet object -> THREE.Mesh
+
+  const CELL = 1.0; // each small cube's edge length in scene units
+  const GAP = 0.05; // visual gap between cubelets
+
+  function colorForDir(cubelet, dirFace) {
+    const ch = cubelet.colors[dirFace];
+    if (!ch) return CUBE3D_INTERNAL_HEX;
+    // ch is a cubejs LETTER (U/R/F/D/L/B); map it to its mosaic color hex
+    return CUBE3D_PALETTE_HEX[ch] || CUBE3D_INTERNAL_HEX;
+  }
+
+  function buildCubeletMesh(cubelet) {
+    const geo = new THREE.BoxGeometry(CELL - GAP, CELL - GAP, CELL - GAP);
+    // BoxGeometry face order: +x, -x, +y, -y, +z, -z
+    const dirOrder = ['R', 'L', 'U', 'D', 'F', 'B'];
+    const materials = dirOrder.map(dirFace => new THREE.MeshLambertMaterial({ color: colorForDir(cubelet, dirFace) }));
+    const mesh = new THREE.Mesh(geo, materials);
+    mesh.position.set(cubelet.x * CELL, cubelet.y * CELL, cubelet.z * CELL);
+    return mesh;
+  }
+
+  function rebuildAllMeshes() {
+    cubeletGroup.clear();
+    meshByCubelet.clear();
+    for (const cubelet of cubelets) {
+      const mesh = buildCubeletMesh(cubelet);
+      cubeletGroup.add(mesh);
+      meshByCubelet.set(cubelet, mesh);
+    }
+  }
+  rebuildAllMeshes();
+
+  function render() { renderer.render(scene, camera); }
+  render();
+
+  // --- orbit-style drag rotation (simple, no external controls lib) ---
+  let dragging = false, lastX = 0, lastY = 0;
+  let viewRotX = -0.35, viewRotY = 0.6;
+  function applyViewRotation() {
+    cubeletGroup.rotation.set(0, 0, 0);
+    cubeletGroup.rotateY(viewRotY);
+    cubeletGroup.rotateX(viewRotX);
+  }
+  applyViewRotation();
+  render();
+  function onPointerDown(e) { dragging = true; lastX = (e.touches ? e.touches[0].clientX : e.clientX); lastY = (e.touches ? e.touches[0].clientY : e.clientY); }
+  function onPointerMove(e) {
+    if (!dragging) return;
+    const x = (e.touches ? e.touches[0].clientX : e.clientX);
+    const y = (e.touches ? e.touches[0].clientY : e.clientY);
+    viewRotY += (x - lastX) * 0.01;
+    viewRotX += (y - lastY) * 0.01;
+    viewRotX = Math.max(-1.4, Math.min(1.4, viewRotX));
+    lastX = x; lastY = y;
+    applyViewRotation();
+    render();
+    e.preventDefault();
+  }
+  function onPointerUp() { dragging = false; }
+  renderer.domElement.addEventListener('mousedown', onPointerDown);
+  renderer.domElement.addEventListener('touchstart', onPointerDown, { passive: true });
+  window.addEventListener('mousemove', onPointerMove);
+  window.addEventListener('touchmove', onPointerMove, { passive: false });
+  window.addEventListener('mouseup', onPointerUp);
+  window.addEventListener('touchend', onPointerUp);
+
+  // --- move playback ---
+  let currentStep = 0; // number of moves fully applied so far (0..moves.length)
+  let animating = false;
+
+  // Animates ONE quarter-turn visually (the layer's meshes spin smoothly
+  // from 0 to the target angle), then bakes the rotation into the
+  // logical model and rebuilds meshes at their new resting transforms --
+  // baking after each quarter turn (rather than accumulating raw mesh
+  // transforms) keeps subsequent layer-selection and future animations
+  // exact, since cube3dApplyQuarterTurn is the same verified logic used
+  // for state tracking, not an approximation.
+  function animateQuarterTurn(face, clockwise, onDone) {
+    const axis = (face === 'R' || face === 'L') ? 'x' : (face === 'U' || face === 'D') ? 'y' : 'z';
+    const layerVal = (face === 'R' || face === 'U' || face === 'F') ? 1 : -1;
+    const layerCubelets = cubelets.filter(c => c[axis] === layerVal);
+    const pivot = new THREE.Group();
+    scene.add(pivot); // NOTE: pivot added to scene directly, matching cubeletGroup's world transform via copy below
+    pivot.quaternion.copy(cubeletGroup.quaternion);
+    pivot.position.copy(cubeletGroup.position);
+    const meshes = layerCubelets.map(c => meshByCubelet.get(c));
+    meshes.forEach(m => { cubeletGroup.remove(m); pivot.add(m); });
+
+    const { axis: rotAxis } = CUBE3D_AXIS_ANGLE[face];
+    const baseAngle = CUBE3D_AXIS_ANGLE[face].angle;
+    const targetAngle = clockwise ? baseAngle : -baseAngle;
+    const axisVec = new THREE.Vector3(rotAxis.x, rotAxis.y, rotAxis.z);
+
+    const duration = 260; // ms per quarter turn -- quick enough not to feel sluggish across many moves, slow enough to actually see
+    const start = performance.now();
+    function tick() {
+      const t = Math.min(1, (performance.now() - start) / duration);
+      const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; // easeInOutQuad
+      pivot.setRotationFromAxisAngle(axisVec, targetAngle * eased);
+      render();
+      if (t < 1) {
+        requestAnimationFrame(tick);
+      } else {
+        meshes.forEach(m => { pivot.remove(m); cubeletGroup.add(m); });
+        scene.remove(pivot);
+        for (let i = 0; i < (clockwise ? 1 : 3); i++) cube3dApplyQuarterTurn(cubelets, face);
+        rebuildAllMeshes();
+        render();
+        onDone();
+      }
+    }
+    requestAnimationFrame(tick);
+  }
+
+  // Plays move index `idx` (0-based into `moves`) forward, animating
+  // however many quarter-turns it represents (1 for a plain/[''], 2 for
+  // a double-turn, animated as two consecutive quarter turns so the
+  // direction is still visually clear).
+  function playMoveForward(idx, onDone) {
+    if (idx < 0 || idx >= moves.length) { onDone(); return; }
+    const { face, turns } = cube3dParseMove(moves[idx]);
+    const clockwise = turns !== 3; // 3 clockwise quarters == 1 counterclockwise, but we still animate forward as CW steps for turns 1 and 2
+    const quarterTurns = turns === 2 ? 2 : 1;
+    let done = 0;
+    function step() {
+      if (done >= quarterTurns) { onDone(); return; }
+      animateQuarterTurn(face, clockwise, () => { done++; step(); });
+    }
+    step();
+  }
+
+  return {
+    get currentStep() { return currentStep; },
+    get totalSteps() { return moves.length; },
+    get isAnimating() { return animating; },
+    moves,
+    next(callback) {
+      if (animating || currentStep >= moves.length) return;
+      animating = true;
+      playMoveForward(currentStep, () => {
+        currentStep++;
+        animating = false;
+        if (callback) callback();
+      });
+    },
+    // Re-derives the model from scratch up to the new step index rather
+    // than animating backward (animating a turn in reverse is just as
+    // complex as forward and "instant jump" is perfectly fine for
+    // stepping back -- you're reviewing a move you already saw).
+    jumpTo(stepIndex, callback) {
+      if (animating) return;
+      const clamped = Math.max(0, Math.min(moves.length, stepIndex));
+      cubelets = cube3dBuildModel(startStr);
+      for (let i = 0; i < clamped; i++) {
+        const { face, turns } = cube3dParseMove(moves[i]);
+        for (let t = 0; t < turns; t++) cube3dApplyQuarterTurn(cubelets, face);
+      }
+      currentStep = clamped;
+      rebuildAllMeshes();
+      render();
+      if (callback) callback();
+    },
+    dispose() {
+      renderer.domElement.removeEventListener('mousedown', onPointerDown);
+      renderer.domElement.removeEventListener('touchstart', onPointerDown);
+      window.removeEventListener('mousemove', onPointerMove);
+      window.removeEventListener('touchmove', onPointerMove);
+      window.removeEventListener('mouseup', onPointerUp);
+      window.removeEventListener('touchend', onPointerUp);
+      renderer.dispose();
+    },
+  };
+}
+
+// --- Modal UI: opens a CubeViewer for one placement's move sequence ---
+let activeCubeViewer = null;
+let activeViewerAutoplayTimer = null;
+let cubeViewerTriggerEl = null; // element to restore focus to when the modal closes
+let cubeViewerKeydownHandler = null; // bound per-open so it can be removed again on close
+
+function closeCubeViewer() {
+  if (activeViewerAutoplayTimer) { clearTimeout(activeViewerAutoplayTimer); activeViewerAutoplayTimer = null; }
+  if (activeCubeViewer) { activeCubeViewer.dispose(); activeCubeViewer = null; }
+  const overlay = document.getElementById('cubeViewerOverlay');
+  if (overlay) overlay.remove();
+  if (cubeViewerKeydownHandler) { document.removeEventListener('keydown', cubeViewerKeydownHandler); cubeViewerKeydownHandler = null; }
+  if (cubeViewerTriggerEl && typeof cubeViewerTriggerEl.focus === 'function') { cubeViewerTriggerEl.focus(); }
+  cubeViewerTriggerEl = null;
+}
+
+// Returns the ordered list of placement indices that have actual
+// moves to animate (skipping free matches, which have nothing to
+// play) -- this is what "previous/next cube" navigation steps through,
+// and what the progress count ("cube 4 of 212 needing turns") is based
+// on, since that's a more useful number to track while physically
+// working through a stack of cubes than the total placement count
+// (which includes free matches you never visit in this viewer at all).
+function cubeViewerNavigableIndices(planState) {
+  const indices = [];
+  planState.placements.forEach((p, i) => { if (p.type === 'solve') indices.push(i); });
+  return indices;
+}
+
+function openCubeViewer(placementIndex) {
+  if (typeof THREE === 'undefined') {
+    alert("The 3D viewer couldn't load (this needs an internet connection to fetch the Three.js library). The text instructions above still work fine without it.");
+    return;
+  }
+  const planState = appState.patternPlanState;
+  const placement = planState.placements[placementIndex];
+  const width = planState.mosaicWidth;
+  const pos = gridPositionForLine(placement.targetLineNum, width);
+  const posLabel = pos ? `row ${pos.row}, col ${pos.col}` : `line ${placement.targetLineNum}`;
+  const minimapHtml = buildCubeViewerMinimapHtml(planState.targetsInput, width, placement.targetLineNum);
+
+  const navigable = cubeViewerNavigableIndices(planState);
+  const navPos = navigable.indexOf(placementIndex); // this cube's position among "cubes needing turns", 0-based
+  const placedSoFar = navigable.slice(0, navPos + 1).filter(i => planState.placements[i].placed).length;
+
+  closeCubeViewer(); // only one at a time
+  cubeViewerTriggerEl = document.activeElement; // remember focus to restore it when this closes
+  const overlay = document.createElement('div');
+  overlay.className = 'cube-viewer-overlay';
+  overlay.id = 'cubeViewerOverlay';
+  overlay.innerHTML = `
+    <div class="cube-viewer-modal" role="dialog" aria-modal="true" aria-labelledby="cubeViewerTitle" tabindex="-1">
+      <div class="cube-viewer-header">
+        <div>
+          <h3 id="cubeViewerTitle">${placement.mosaicPattern} &mdash; show ${FACE_FULL_NAMES[placement.face]} face</h3>
+          <div style="font-size:0.72rem; color:var(--text-dim); margin-top:2px;">Target ${posLabel}</div>
+        </div>
+        <button class="cube-viewer-close" id="cubeViewerCloseBtn" aria-label="Close 3D viewer">&times;</button>
+      </div>
+      ${minimapHtml}
+      <div style="padding:0 16px 10px;">
+        <div style="display:flex; justify-content:space-between; font-size:0.72rem; color:var(--text-dim); margin-bottom:4px;">
+          <span>Cube ${navPos + 1} of ${navigable.length} needing turns</span>
+          <span>${placedSoFar} marked placed so far</span>
+        </div>
+        <div style="background:#111; border-radius:6px; height:6px; overflow:hidden;">
+          <div style="background:var(--accent); height:100%; width:${(100 * (navPos + 1) / Math.max(1, navigable.length)).toFixed(1)}%;"></div>
+        </div>
+      </div>
+      <div class="cube-viewer-canvas-wrap" id="cubeViewerCanvasWrap"></div>
+      <div class="cube-viewer-step-label" id="cubeViewerStepLabel"></div>
+      <div class="cube-viewer-moves-strip" id="cubeViewerMovesStrip" tabindex="0" role="group" aria-label="Full move sequence, scrollable"></div>
+      <div class="cube-viewer-controls">
+        <button id="cubeViewerPrevBtn">&larr; Prev</button>
+        <button id="cubeViewerPlayBtn" class="play-btn">Play</button>
+        <button id="cubeViewerNextBtn">Next &rarr;</button>
+      </div>
+      <div class="cube-viewer-controls" style="padding-top:0;">
+        <button id="cubeViewerPrevCubeBtn" ${navPos <= 0 ? 'disabled' : ''}>&larr; Prev cube</button>
+        <button id="cubeViewerMarkPlacedBtn">${placement.placed ? '✓ Placed' : 'Mark placed'}</button>
+        <button id="cubeViewerNextCubeBtn" ${navPos >= navigable.length - 1 ? 'disabled' : ''}>Next cube &rarr;</button>
+      </div>
+      <div class="cube-viewer-hint">Drag the cube to rotate your view.</div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  overlay.onclick = (e) => { if (e.target === overlay) closeCubeViewer(); };
+  document.getElementById('cubeViewerCloseBtn').onclick = closeCubeViewer;
+  document.getElementById('cubeViewerPrevCubeBtn').onclick = () => { if (navPos > 0) openCubeViewer(navigable[navPos - 1]); };
+  document.getElementById('cubeViewerNextCubeBtn').onclick = () => { if (navPos < navigable.length - 1) openCubeViewer(navigable[navPos + 1]); };
+  document.getElementById('cubeViewerMarkPlacedBtn').onclick = () => {
+    placement.placed = !placement.placed;
+    if (planState.status === 'done') savePlanRunProgress(planState);
+    renderPlanResult();
+    openCubeViewer(placementIndex); // re-render the modal in place to reflect the new placed state/progress
+  };
+
+  // Keyboard accessibility: Escape closes the dialog, and Tab/Shift+Tab
+  // cycle (trap) focus among the dialog's own focusable controls rather
+  // than leaking out to the page behind the overlay.
+  const dialogEl = overlay.querySelector('.cube-viewer-modal');
+  cubeViewerKeydownHandler = (e) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      closeCubeViewer();
+      return;
+    }
+    if (e.key === 'Tab' && dialogEl) {
+      const focusable = Array.from(dialogEl.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'))
+        .filter(el => !el.disabled && el.offsetParent !== null);
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+  };
+  document.addEventListener('keydown', cubeViewerKeydownHandler);
+  if (dialogEl) dialogEl.focus(); // move focus into the dialog so screen readers announce it and Tab starts inside
+
+  const canvasWrap = document.getElementById('cubeViewerCanvasWrap');
+  try {
+    activeCubeViewer = createCubeViewer(canvasWrap, placement.startStr, placement.moves);
+  } catch (e) {
+    closeCubeViewer();
+    alert("Couldn't start the 3D viewer on this device (" + e.message + "). The text instructions above still work fine.");
+    return;
+  }
+
+  function updateStepUI() {
+    const v = activeCubeViewer;
+    const label = document.getElementById('cubeViewerStepLabel');
+    if (label) {
+      if (v.totalSteps === 0) {
+        label.innerHTML = 'This cube is already correct &mdash; no moves to play.';
+      } else if (v.currentStep >= v.totalSteps) {
+        label.innerHTML = `<strong style="color:var(--success); font-size:1.3rem;">Done</strong> &mdash; all ${v.totalSteps} moves complete`;
+      } else {
+        const nextMove = v.moves[v.currentStep];
+        label.innerHTML = `Turn <strong style="font-size:1.5rem; font-family:'SF Mono',Monaco,monospace;">${nextMove}</strong> next &nbsp;<span style="color:var(--text-dim);">(move ${v.currentStep + 1} of ${v.totalSteps})</span>`;
+      }
+    }
+    const strip = document.getElementById('cubeViewerMovesStrip');
+    if (strip) {
+      strip.innerHTML = v.moves.map((m, i) => `<span class="cube-viewer-move-chip ${i === v.currentStep ? 'current' : ''} ${i < v.currentStep ? 'done' : ''}">${m}</span>`).join('');
+      const currentChip = strip.querySelector('.current');
+      if (currentChip && typeof currentChip.scrollIntoView === 'function') {
+        currentChip.scrollIntoView({ block: 'nearest', inline: 'center' });
+      }
+    }
+    const prevBtn = document.getElementById('cubeViewerPrevBtn');
+    const nextBtn = document.getElementById('cubeViewerNextBtn');
+    const playBtn = document.getElementById('cubeViewerPlayBtn');
+    if (prevBtn) prevBtn.disabled = v.currentStep === 0 || v.isAnimating;
+    if (nextBtn) nextBtn.disabled = v.currentStep >= v.totalSteps || v.isAnimating;
+    if (playBtn) playBtn.disabled = v.totalSteps === 0;
+  }
+  updateStepUI();
+
+  document.getElementById('cubeViewerPrevBtn').onclick = () => {
+    if (activeViewerAutoplayTimer) { clearTimeout(activeViewerAutoplayTimer); activeViewerAutoplayTimer = null; document.getElementById('cubeViewerPlayBtn').textContent = 'Play'; }
+    activeCubeViewer.jumpTo(activeCubeViewer.currentStep - 1, updateStepUI);
+  };
+  document.getElementById('cubeViewerNextBtn').onclick = () => {
+    activeCubeViewer.next(updateStepUI);
+  };
+  document.getElementById('cubeViewerPlayBtn').onclick = () => {
+    const btn = document.getElementById('cubeViewerPlayBtn');
+    if (activeViewerAutoplayTimer) {
+      clearTimeout(activeViewerAutoplayTimer);
+      activeViewerAutoplayTimer = null;
+      btn.textContent = 'Play';
+      return;
+    }
+    btn.textContent = 'Pause';
+    function tick() {
+      if (!activeCubeViewer || activeCubeViewer.currentStep >= activeCubeViewer.totalSteps) {
+        activeViewerAutoplayTimer = null;
+        btn.textContent = 'Play';
+        return;
+      }
+      activeCubeViewer.next(() => {
+        updateStepUI();
+        if (activeCubeViewer.currentStep < activeCubeViewer.totalSteps) {
+          activeViewerAutoplayTimer = setTimeout(tick, 220);
+        } else {
+          activeViewerAutoplayTimer = null;
+          btn.textContent = 'Play';
+        }
+      });
+    }
+    tick();
+  };
+}
+
+// =====================================================================
+// Init
+// =====================================================================
+
+window.addEventListener('load', () => {
+  setTimeout(() => {
+    try {
+      Cube.initSolver();
+      appState.solverReady = true;
+    } catch (e) {
+      document.getElementById('app').innerHTML = `<div class="loading-msg">Failed to load solver: ${e.message}</div>`;
+      return;
+    }
+    render();
+  }, 50);
+});
+</script>
+</body>
+</html>
