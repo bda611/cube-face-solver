@@ -2815,10 +2815,11 @@
  *      verified Node prototype), using cubejs's native cp/co/ep/eo
  *      representation and the EXACT validity rules from cubejs's own
  *      source (permutation swap-parity, corner/edge orientation parity).
- *   3. moves = solve(current) + inverse(solve(target)) -- i.e. go
- *      current -> solved -> target. This works because solve() always
- *      finds a path TO the solved state; chaining one forward solve
- *      with one reversed solve lets us reach ANY other legal state.
+ *   3. Direct one-pass solve: build targetCube^(-1) by applying
+ *      targetCube.solve() to an identity cube, multiply by currentCube,
+ *      then solve the composed state. Yields a single Kociemba call
+ *      (≤22 moves) rather than the old two-hop current→solved→target
+ *      which could reach 44 moves for chained cubes.
  *   4. VERIFY the result before showing it: apply the moves to the
  *      current state and confirm the target face matches exactly.
  *
@@ -3123,17 +3124,20 @@ function solveForFace(currentStateStr, targetFace, targetGridLetters) {
     return { success: false, error: `Invalid cube state: ${e.message}` };
   }
 
-  let movesA, movesB;
+  // Direct one-pass solve: find M such that currentCube * M = targetCube.
+  // Build targetCube^(-1) by applying targetCube.solve() to an identity cube,
+  // then right-multiply by currentCube to form (targetCube^(-1) * currentCube).
+  // Solving that composed state gives M directly (single Kociemba call, ≤22 moves),
+  // vs. the old current→identity→target two-hop which could reach 44 moves.
+  let fullSequence;
   try {
-    movesA = currentCube.solve();
-    movesB = targetCube.solve();
+    const movesB = targetCube.solve();        // takes targetCube to identity
+    const composed = new Cube().move(movesB); // targetCube^(-1) as a cube state
+    composed.multiply(currentCube);           // targetCube^(-1) × currentCube
+    fullSequence = simplifyMoves(composed.solve()); // M: currentCube → targetCube
   } catch (e) {
     return { success: false, error: `Solver error: ${e.message}` };
   }
-
-  const movesBInverse = inverseMoves(movesB);
-  const rawSequence = [movesA, movesBInverse].filter(s => s.trim() !== '').join(' ').trim();
-  const fullSequence = simplifyMoves(rawSequence);
 
   const verifyCube = Cube.fromString(currentStateStr);
   if (fullSequence !== '') verifyCube.move(fullSequence);
