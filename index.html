@@ -3988,9 +3988,19 @@ Read each grid's colors exactly as shown in the PDF -- don't infer, simplify, or
       const bounds = findGridBounds(imageData, canvas.width, canvas.height);
       if (!bounds) return null;
 
-      const { minX, maxX, minY, maxY } = bounds;
+      let { minX, maxX, minY, maxY } = bounds;
       const gridW = maxX - minX;
-      const gridH = maxY - minY;
+      let gridH = maxY - minY;
+
+      // Ruwix stickers are square: expected gridH = gridW * cubesTall / cubesWide.
+      // If gridH is >10% larger, the thumbnail image above the cube grid has dark
+      // pixels that pushed minY too high on the page. Anchor to maxY (reliable)
+      // and recompute minY from the expected height.
+      const expectedGridH = Math.round(gridW * cubesTall / cubesWide);
+      if (gridH > expectedGridH * 1.1) {
+        minY = maxY - expectedGridH;
+        gridH = expectedGridH;
+      }
 
       // Each cube is 3 cells wide × 3 cells tall
       const cellW = gridW / (cubesWide * 3);
