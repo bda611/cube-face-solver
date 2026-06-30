@@ -712,6 +712,15 @@
   .cube-viewer-hint { text-align: center; font-size: 0.7rem; color: var(--text-dim); padding: 0 16px 12px; }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.128.0/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+  // When running as a local file://, browsers block CDN worker scripts due to
+  // CORS. Explicitly disabling the worker avoids the "fake worker" warning and
+  // runs PDF.js in-thread instead, which works fine for our use case.
+  if (typeof pdfjsLib !== 'undefined') {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+  }
+</script>
 </head>
 <body>
 <div class="container" id="app">
@@ -3699,22 +3708,36 @@ function renderPatternMode() {
       <button class="secondary-btn" id="addSourceRowBtn" style="margin-bottom:0;">+ Add another source</button>
     </div>
 
-    <h2 class="section-heading"><span class="step-badge">STEP 2</span>Prepare the color input data for Target Mosaic</h2>
+    <h2 class="section-heading"><span class="step-badge">STEP 2</span>Import target mosaic from Ruwix PDF</h2>
     <div class="panel">
-      <p class="panel-desc" style="margin-bottom:10px;">Turn a picture into pasteable target-mosaic data:</p>
-      <ol class="prep-steps panel-desc">
-        <li>Go to <a href="https://ruwix.com/rubiks-cube-mosaic-generator/" target="_blank" rel="noopener">ruwix.com/rubiks-cube-mosaic-generator</a> and upload an image of what you want the mosaic to depict.</li>
-        <li>Proceed through Ruwix's steps to convert the image into a mosaic plan.</li>
-        <li>Download the finalized mosaic plan PDF of your choice.</li>
-        <li>Open a new Claude chat inside this same Rubik's Cube Mosaic project.</li>
-        <li>Paste the prompt below into that chat, then attach the downloaded PDF:
+      <p class="panel-desc" style="margin-bottom:12px;">Generate your mosaic plan at <a href="https://ruwix.com/rubiks-cube-mosaic-generator/" target="_blank" rel="noopener">ruwix.com/rubiks-cube-mosaic-generator</a>, download the PDF, then import it here &mdash; the tool reads every cube's colors automatically.</p>
+
+      <div id="pdfDropZone" style="border:2px dashed var(--border); border-radius:8px; padding:24px 16px; text-align:center; cursor:pointer; transition:border-color 0.15s, background 0.15s; margin-bottom:12px;">
+        <div style="font-size:1.5rem; margin-bottom:6px;">&#x1F4C4;</div>
+        <div style="color:var(--text); font-weight:600; margin-bottom:4px;">Drop Ruwix PDF here</div>
+        <div style="color:var(--text-dim); font-size:0.8rem; margin-bottom:12px;">or click to choose a file</div>
+        <button class="secondary-btn" id="pdfPickBtn" type="button" style="margin:0;">Choose PDF&hellip;</button>
+        <input type="file" id="pdfFileInput" accept=".pdf,application/pdf" style="display:none;" aria-label="Choose Ruwix mosaic PDF">
+      </div>
+
+      <div id="pdfImportStatus" style="display:none; margin-bottom:8px;" aria-live="polite"></div>
+      <div id="pdfImportProgress" style="display:none; margin-bottom:8px;">
+        <div style="background:var(--border); border-radius:4px; height:6px; overflow:hidden;">
+          <div id="pdfProgressBar" style="background:var(--accent); height:100%; width:0%; transition:width 0.1s;"></div>
+        </div>
+        <div id="pdfProgressLabel" style="color:var(--text-dim); font-size:0.75rem; margin-top:4px;"></div>
+      </div>
+
+      <details style="margin-top:8px;">
+        <summary style="color:var(--text-dim); font-size:0.8rem; cursor:pointer; user-select:none;">Prefer to paste manually instead?</summary>
+        <div style="margin-top:10px;">
+          <p class="panel-desc" style="margin-bottom:8px; font-size:0.8rem;">Use this Claude prompt with the PDF attached:</p>
           <div class="claude-prompt-box" id="claudeConversionPrompt">Convert this Ruwix mosaic instruction PDF into plain text I can paste into my Cube Face Solver tool.
 
 Read each grid's colors exactly as shown in the PDF -- don't infer, simplify, or smooth over isolated single-color tiles. Convert every 3x3 grid into one 9-character line using only W=White, Y=Yellow, R=Red, O=Orange, B=Blue, G=Green, no other letters or punctuation. Read each grid row-major (left-to-right within a row, top row first). Output one line per cube in the same order the PDF lists/arranges the cubes -- if the mosaic is a 2D grid, confirm row-by-row left-to-right, top-to-bottom ordering before converting. Give me the result as bare 9-letter lines only in one code block, no row labels or commentary between lines, so I can paste the whole block directly into the tool. If the PDF uses a different color scheme than W/Y/R/O/B/G, tell me what you see and confirm the mapping with me first. Also tell me the total number of cubes and the mosaic's width (cubes per row).</div>
           <button class="secondary-btn" id="copyConversionPromptBtn" style="margin:8px 0 0;">Copy prompt</button>
-        </li>
-        <li>Once Claude replies with the converted lines, paste them into the <strong style="color:var(--text);">Target mosaic patterns</strong> box below, and fill in the <strong style="color:var(--text);">expected number of cubes</strong> and <strong style="color:var(--text);">mosaic width</strong> fields using the totals Claude (or your Ruwix PDF) gave you.</li>
-      </ol>
+        </div>
+      </details>
     </div>
 
     <h2 class="section-heading">Target mosaic</h2>
@@ -3771,6 +3794,291 @@ Read each grid's colors exactly as shown in the PDF -- don't infer, simplify, or
       setTimeout(() => { copyPromptBtn.textContent = 'Copy prompt'; }, 2000);
     };
   }
+
+  // ── PDF IMPORT ──────────────────────────────────────────────────────────────
+  // Reads a Ruwix mosaic instruction PDF, samples cell colors on each page,
+  // and populates the target textarea + width/count fields automatically.
+  (function initPdfImport() {
+    const dropZone   = document.getElementById('pdfDropZone');
+    const fileInput  = document.getElementById('pdfFileInput');
+    const pickBtn    = document.getElementById('pdfPickBtn');
+    const statusEl   = document.getElementById('pdfImportStatus');
+    const progressEl = document.getElementById('pdfImportProgress');
+    const progressBar   = document.getElementById('pdfProgressBar');
+    const progressLabel = document.getElementById('pdfProgressLabel');
+    if (!dropZone || !fileInput) return;
+
+    // Wire pick button and drop zone
+    pickBtn.onclick = () => fileInput.click();
+    dropZone.onclick = (e) => { if (e.target !== pickBtn) fileInput.click(); };
+    fileInput.onchange = (e) => { if (e.target.files[0]) handlePdfFile(e.target.files[0]); };
+
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.style.borderColor = 'var(--accent)';
+      dropZone.style.background = 'rgba(74,138,240,0.07)';
+    });
+    dropZone.addEventListener('dragleave', () => {
+      dropZone.style.borderColor = '';
+      dropZone.style.background = '';
+    });
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.style.borderColor = '';
+      dropZone.style.background = '';
+      const file = e.dataTransfer.files[0];
+      if (file && file.type === 'application/pdf') handlePdfFile(file);
+      else showStatus('Please drop a PDF file.', 'error');
+    });
+
+    function showStatus(msg, type) {
+      statusEl.style.display = 'block';
+      statusEl.style.color = type === 'error' ? 'var(--error)' : type === 'success' ? 'var(--success)' : 'var(--text-dim)';
+      statusEl.textContent = msg;
+    }
+    function setProgress(pct, label) {
+      progressEl.style.display = 'block';
+      progressBar.style.width = pct + '%';
+      progressLabel.textContent = label;
+    }
+    function hideProgress() { progressEl.style.display = 'none'; }
+
+    // ── Color classification ─────────────────────────────────────────────────
+    // Ruwix palette RGB values (approximate midpoints for each color)
+    const RUWIX_COLORS = [
+      { code: 'W', r: 255, g: 255, b: 255 },
+      { code: 'Y', r: 255, g: 213, b:   0 },
+      { code: 'R', r: 183, g:  18, b:  52 },
+      { code: 'O', r: 255, g:  88, b:   0 },
+      { code: 'B', r:   0, g:  70, b: 173 },
+      { code: 'G', r:   0, g: 155, b:  72 },
+    ];
+
+    function classifyColor(r, g, b) {
+      let best = null, bestDist = Infinity;
+      for (const c of RUWIX_COLORS) {
+        const d = (r - c.r) ** 2 + (g - c.g) ** 2 + (b - c.b) ** 2;
+        if (d < bestDist) { bestDist = d; best = c.code; }
+      }
+      return best;
+    }
+
+    // ── Grid detection and cell sampling ────────────────────────────────────
+    // Ruwix PDFs render a thick black border around the entire grid block,
+    // with gray dividers between individual 3x3 cube grids.
+    // Strategy: scan the canvas for the bounding box of the colored region
+    // (non-white, non-near-black), then divide into the known grid structure.
+
+    function findGridBounds(imageData, w, h) {
+      const d = imageData.data;
+      let minX = w, maxX = 0, minY = h, maxY = 0;
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const i = (y * w + x) * 4;
+          const r = d[i], g = d[i+1], b = d[i+2];
+          // Skip near-white (background) and near-black (borders/text)
+          const isBackground = r > 220 && g > 220 && b > 220;
+          const isBorder = r < 60 && g < 60 && b < 60;
+          if (!isBackground && !isBorder) {
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+          }
+        }
+      }
+      return (maxX > minX && maxY > minY) ? { minX, maxX, minY, maxY } : null;
+    }
+
+    // Sample the color at the center of a cell, averaging a small patch
+    function sampleCell(imageData, w, cx, cy, patchRadius) {
+      const d = imageData.data;
+      const r = patchRadius || 4;
+      let rSum = 0, gSum = 0, bSum = 0, count = 0;
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          const px = Math.round(cx + dx);
+          const py = Math.round(cy + dy);
+          if (px < 0 || py < 0 || px >= w || py >= imageData.height) continue;
+          const i = (py * w + px) * 4;
+          rSum += d[i]; gSum += d[i+1]; bSum += d[i+2];
+          count++;
+        }
+      }
+      if (!count) return 'W';
+      return classifyColor(Math.round(rSum/count), Math.round(gSum/count), Math.round(bSum/count));
+    }
+
+    // Extract cube patterns from one rendered canvas page.
+    // cubesWide: number of cube-columns on this page (always 3 for Ruwix)
+    // cubesTall: number of cube-rows on this page (1 for row-1 pages, 4 for others)
+    function extractPageCubes(canvas, cubesWide, cubesTall) {
+      const ctx = canvas.getContext('2d');
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      imageData.height = canvas.height; // attach for sampleCell
+      const bounds = findGridBounds(imageData, canvas.width, canvas.height);
+      if (!bounds) return null;
+
+      const { minX, maxX, minY, maxY } = bounds;
+      const gridW = maxX - minX;
+      const gridH = maxY - minY;
+
+      // Each cube is 3 cells wide × 3 cells tall
+      const cellW = gridW / (cubesWide * 3);
+      const cellH = gridH / (cubesTall * 3);
+      const patchR = Math.max(2, Math.floor(Math.min(cellW, cellH) * 0.25));
+
+      const cubes = [];
+      for (let cubeRow = 0; cubeRow < cubesTall; cubeRow++) {
+        for (let cubeCol = 0; cubeCol < cubesWide; cubeCol++) {
+          let pattern = '';
+          for (let cellRow = 0; cellRow < 3; cellRow++) {
+            for (let cellCol = 0; cellCol < 3; cellCol++) {
+              const cx = minX + (cubeCol * 3 + cellCol + 0.5) * cellW;
+              const cy = minY + (cubeRow * 3 + cellRow + 0.5) * cellH;
+              pattern += sampleCell(imageData, canvas.width, cx, cy, patchR);
+            }
+          }
+          cubes.push(pattern);
+        }
+      }
+      return cubes;
+    }
+
+    // ── Main import handler ──────────────────────────────────────────────────
+    async function handlePdfFile(file) {
+      // Check PDF.js is loaded
+      if (typeof pdfjsLib === 'undefined') {
+        showStatus('PDF library not loaded. Check your internet connection and try reloading the page.', 'error');
+        return;
+      }
+      // workerSrc is configured at page load; disableWorker is set on getDocument call
+
+      showStatus('Reading PDF…', 'info');
+      setProgress(0, 'Loading…');
+      hideProgress();
+      setProgress(0, 'Loading PDF…');
+
+      let pdf;
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        pdf = await pdfjsLib.getDocument({ data: arrayBuffer, disableWorker: true }).promise;
+      } catch (e) {
+        showStatus('Could not read PDF: ' + e.message, 'error');
+        hideProgress();
+        return;
+      }
+
+      const totalPages = pdf.numPages;
+      // Page 1 is the overview/legend page — skip it.
+      // Pages 2 onward are the cube pages.
+      // Page 2 = row 1 pages start. We need to figure out the mosaic structure.
+      // Ruwix PDFs: page 1 = overview. Pages 2..N = cube instruction pages.
+      // Each cube page has 3 cubes wide. Row-1 pages have 1 cube tall, others have 4.
+      // We detect cubesTall by checking the aspect ratio of the grid on the page.
+
+      const allCubes = [];
+      let mosaicWidth = null;
+      let cubesPerRowPage = 3; // always 3 for Ruwix
+
+      const offscreenCanvas = document.createElement('canvas');
+
+      for (let pageNum = 2; pageNum <= totalPages; pageNum++) {
+        try {
+          const page = await pdf.getPage(pageNum);
+          const scale = 2.0; // render at 2x for better color accuracy
+          const viewport = page.getViewport({ scale });
+          offscreenCanvas.width = viewport.width;
+          offscreenCanvas.height = viewport.height;
+          const ctx = offscreenCanvas.getContext('2d');
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, viewport.width, viewport.height);
+          await page.render({ canvasContext: ctx, viewport }).promise;
+
+          // Detect cubesTall: check grid aspect ratio vs known cell structure
+          // A 3-wide × 1-tall grid has aspect ≈ 3:1; 3-wide × 4-tall ≈ 3:4
+          const imageData = ctx.getImageData(0, 0, offscreenCanvas.width, offscreenCanvas.height);
+          imageData.height = offscreenCanvas.height;
+          const bounds = findGridBounds(imageData, offscreenCanvas.width, offscreenCanvas.height);
+          let cubesTall = 4; // default
+          if (bounds) {
+            const gridW = bounds.maxX - bounds.minX;
+            const gridH = bounds.maxY - bounds.minY;
+            const ratio = gridH / gridW;
+            // 1-row page: ratio ≈ 0.33; 4-row page: ratio ≈ 1.33
+            cubesTall = ratio < 0.6 ? 1 : 4;
+          }
+
+          const pageCubes = extractPageCubes(offscreenCanvas, cubesPerRowPage, cubesTall);
+          if (pageCubes) {
+            // Track mosaic width: all pages have cubesPerRowPage × (page column count)
+            // The mosaic width = total columns = cubesPerRowPage × 9 pages per row
+            // We can infer from totalPages: (totalPages - 1) pages, structured as
+            // 9 row-1 pages + 9*9 subsequent pages. But easier: width from PDF title.
+            // For now accumulate and we'll set width after.
+            allCubes.push(...pageCubes);
+          }
+
+          const pct = Math.round(((pageNum - 1) / (totalPages - 1)) * 100);
+          setProgress(pct, `Page ${pageNum - 1} of ${totalPages - 1}…`);
+        } catch (e) {
+          console.warn('Error on page', pageNum, e);
+        }
+      }
+
+      if (allCubes.length === 0) {
+        showStatus('No cube patterns found. Is this a Ruwix mosaic PDF?', 'error');
+        hideProgress();
+        return;
+      }
+
+      // Try to extract mosaic dimensions from page 1 text
+      let detectedWidth = null;
+      let detectedTotal = null;
+      try {
+        const page1 = await pdf.getPage(1);
+        const textContent = await page1.getTextContent();
+        const text = textContent.items.map(i => i.str).join(' ');
+        // Look for "NxM = K cubes" pattern
+        const m = text.match(/(\d+)\s*[x×]\s*(\d+)\s*=\s*(\d+)\s*cube/i);
+        if (m) {
+          detectedWidth = parseInt(m[1]);
+          detectedTotal = parseInt(m[3]);
+        }
+      } catch(e) { /* ignore */ }
+
+      // Populate the target textarea
+      const textarea = document.getElementById('patternTargetBox');
+      const countInput = document.getElementById('expectedCountInput');
+      const widthInput = document.getElementById('mosaicWidthInput');
+
+      if (textarea) {
+        textarea.value = allCubes.join('\n');
+        appState.patternTargetInput = textarea.value;
+        appState.patternPlanState = null;
+        appState.patternCountMismatchAcked = false;
+      }
+      if (detectedTotal && countInput) {
+        countInput.value = detectedTotal;
+        appState.patternExpectedCount = detectedTotal;
+      }
+      if (detectedWidth && widthInput) {
+        widthInput.value = detectedWidth;
+        appState.patternMosaicWidth = detectedWidth;
+      }
+
+      hideProgress();
+      const msg = detectedTotal
+        ? `Imported ${allCubes.length} cubes (PDF says ${detectedTotal}${allCubes.length !== detectedTotal ? ' — count mismatch, check results' : ' ✓'})`
+        : `Imported ${allCubes.length} cubes`;
+      const isCountOk = !detectedTotal || allCubes.length === detectedTotal;
+      showStatus(msg, isCountOk ? 'success' : 'error');
+
+      updateSubmitButton();
+      debouncedRenderMosaicPreview();
+    }
+  })();
+  // ── END PDF IMPORT ───────────────────────────────────────────────────────
 
   document.getElementById('patternTargetBox').oninput = (e) => {
     appState.patternTargetInput = e.target.value;
