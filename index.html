@@ -4037,6 +4037,9 @@ Read each grid's colors exactly as shown in the PDF -- don't infer, simplify, or
             const ratio = gridH / gridW;
             // 1-row page: ratio ≈ 0.33; 4-row page: ratio ≈ 1.33
             cubesTall = ratio < 0.6 ? 1 : 4;
+            console.log(`Page ${pageNum}: canvas=${offscreenCanvas.width}x${offscreenCanvas.height} pageRatio=${pageRatio.toFixed(3)} bounds=${JSON.stringify(bounds)} maxRow=${maxRow} gridW=${gridW} gridH=${gridH} ratio=${ratio.toFixed(3)} cubesTall=${cubesTall}`);
+          } else {
+            console.log(`Page ${pageNum}: canvas=${offscreenCanvas.width}x${offscreenCanvas.height} pageRatio=${pageRatio.toFixed(3)} bounds=null cubesTall=${cubesTall}`);
           }
 
           const pageCubes = extractPageCubes(offscreenCanvas, cubesPerRowPage, cubesTall);
