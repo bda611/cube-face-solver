@@ -4163,7 +4163,7 @@ Read each grid's colors exactly as shown in the PDF -- don't infer, simplify, or
         for (let pr = 0; pr < numPageRows; pr++) {
           const firstPageIdx = pr * pagesPerRow;
           const rowCubesTall = pageResults[firstPageIdx]?.cubesTall || 1;
-          for (let cr = 0; cr < rowCubesTall; cr++) {
+          for (let cr = rowCubesTall - 1; cr >= 0; cr--) {
             for (let pc = 0; pc < pagesPerRow; pc++) {
               const pg = pageResults[firstPageIdx + pc];
               if (!pg) continue;
