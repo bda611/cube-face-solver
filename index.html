@@ -4037,9 +4037,6 @@ Read each grid's colors exactly as shown in the PDF -- don't infer, simplify, or
             const ratio = gridH / gridW;
             // 1-row page: ratio ≈ 0.33; 4-row page: ratio ≈ 1.33
             cubesTall = ratio < 0.6 ? 1 : 4;
-            console.log(`Page ${pageNum}: canvas=${offscreenCanvas.width}x${offscreenCanvas.height} pageRatio=${pageRatio.toFixed(3)} bounds=${JSON.stringify(bounds)} maxRow=${maxRow} gridW=${gridW} gridH=${gridH} ratio=${ratio.toFixed(3)} cubesTall=${cubesTall}`);
-          } else {
-            console.log(`Page ${pageNum}: canvas=${offscreenCanvas.width}x${offscreenCanvas.height} pageRatio=${pageRatio.toFixed(3)} bounds=null cubesTall=${cubesTall}`);
           }
 
           const pageCubes = extractPageCubes(offscreenCanvas, cubesPerRowPage, cubesTall);
@@ -4079,6 +4076,28 @@ Read each grid's colors exactly as shown in the PDF -- don't infer, simplify, or
           detectedTotal = parseInt(m[3]);
         }
       } catch(e) { /* ignore */ }
+
+      // Post-hoc fix for 1-tall pages misdetected as 4-tall.
+      // On a 1-tall page the legend fills the remaining page height, making its
+      // bounds identical to a 4-tall page — no content-based detector can tell
+      // them apart. But cubeRow=0 samples the correct cube positions either way
+      // (cellH is the same), so we just discard rows 1-3 from those pages.
+      if (detectedTotal && allCubes.length > detectedTotal) {
+        const excess = allCubes.length - detectedTotal;
+        const extraPerPage = cubesPerRowPage * 3; // cubes added by misdetecting 1-tall as 4-tall
+        if (excess % extraPerPage === 0) {
+          const badPageCount = excess / extraPerPage;
+          const cubesPerFullPage = cubesPerRowPage * 4;
+          const goodUpTo = allCubes.length - badPageCount * cubesPerFullPage;
+          const fixed = allCubes.slice(0, goodUpTo);
+          for (let i = 0; i < badPageCount; i++) {
+            const base = goodUpTo + i * cubesPerFullPage;
+            for (let j = 0; j < cubesPerRowPage; j++) fixed.push(allCubes[base + j]);
+          }
+          allCubes.length = 0;
+          allCubes.push(...fixed);
+        }
+      }
 
       // Populate the target textarea
       const textarea = document.getElementById('patternTargetBox');
