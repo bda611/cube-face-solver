@@ -635,6 +635,36 @@
     touch-action: none;
   }
   .cube-viewer-canvas-wrap canvas { display: block; width: 100%; height: 100%; }
+  .cube-orient-wrap { position: relative; flex-shrink: 0; }
+  .cube-orient-label {
+    position: absolute;
+    background: rgba(10,10,10,0.82);
+    color: #e0e0e0;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 8px 3px 5px;
+    border-radius: 4px;
+    font-size: 0.68rem;
+    font-weight: 600;
+    z-index: 5;
+    pointer-events: none;
+    border: 1px solid rgba(255,255,255,0.12);
+    white-space: nowrap;
+    letter-spacing: 0.01em;
+  }
+  .cube-orient-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    border: 1px solid rgba(255,255,255,0.35);
+  }
+  .cube-orient-top    { top: 8px;    left: 50%; transform: translateX(-50%); }
+  .cube-orient-bottom { bottom: 8px; left: 50%; transform: translateX(-50%); }
+  .cube-orient-left   { left: 8px;   top: 50%;  transform: translateY(-50%); }
+  .cube-orient-right  { right: 8px;  top: 50%;  transform: translateY(-50%); }
   .cube-viewer-minimap {
     display: flex;
     align-items: flex-start;
@@ -5179,6 +5209,9 @@ const CUBE3D_AXIS_ANGLE = {
 const CUBE3D_PALETTE_HEX = {
   U: '#009b48', R: '#ffffff', F: '#b71234', D: '#0046ad', L: '#ffd500', B: '#ff5800',
 };
+const CUBE3D_FACE_COLOR_NAME = {
+  U: 'Green', R: 'White', F: 'Red', D: 'Blue', L: 'Yellow', B: 'Orange',
+};
 const CUBE3D_INTERNAL_HEX = '#1a1a1a';
 
 // Parses a move token like "R", "R'", "R2" into { face, turns } where
@@ -5500,6 +5533,11 @@ function openCubeViewer(placementIndex) {
 
   closeCubeViewer(); // only one at a time
   cubeViewerTriggerEl = document.activeElement; // remember focus to restore it when this closes
+
+  function orientLabel(pos, face) {
+    return `<div class="cube-orient-label cube-orient-${pos}"><span class="cube-orient-dot" style="background:${CUBE3D_PALETTE_HEX[face]}"></span>${CUBE3D_FACE_COLOR_NAME[face]} &middot; ${pos}</div>`;
+  }
+
   const overlay = document.createElement('div');
   overlay.className = 'cube-viewer-overlay';
   overlay.id = 'cubeViewerOverlay';
@@ -5522,7 +5560,13 @@ function openCubeViewer(placementIndex) {
           <div style="background:var(--accent); height:100%; width:${(100 * (navPos + 1) / Math.max(1, navigable.length)).toFixed(1)}%;"></div>
         </div>
       </div>
-      <div class="cube-viewer-canvas-wrap" id="cubeViewerCanvasWrap"></div>
+      <div class="cube-orient-wrap">
+        ${orientLabel('top', 'U')}
+        ${orientLabel('right', 'R')}
+        ${orientLabel('bottom', 'D')}
+        ${orientLabel('left', 'L')}
+        <div class="cube-viewer-canvas-wrap" id="cubeViewerCanvasWrap"></div>
+      </div>
       <div class="cube-viewer-step-label" id="cubeViewerStepLabel"></div>
       <div class="cube-viewer-moves-strip" id="cubeViewerMovesStrip" tabindex="0" role="group" aria-label="Full move sequence, scrollable"></div>
       <div class="cube-viewer-controls">
