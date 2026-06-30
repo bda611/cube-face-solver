@@ -3064,7 +3064,7 @@ function allFaceOrientations(str) {
 // style instruction sheet) must be translated through this mapping
 // before it can be compared against a state string's cubejs letters --
 // they are NOT the same alphabet and must never be compared directly.
-const MOSAIC_CODE_TO_CUBE_LETTER = { W: 'U', Y: 'R', R: 'F', O: 'D', B: 'L', G: 'B' };
+const MOSAIC_CODE_TO_CUBE_LETTER = { W: 'U', Y: 'D', R: 'F', O: 'B', B: 'L', G: 'R' };
 function inverseMoves(moveStr) {
   if (!moveStr || moveStr.trim() === '') return '';
   return moveStr.trim().split(/\s+/).reverse().map(m => {
@@ -5173,7 +5173,7 @@ const CUBE3D_AXIS_ANGLE = {
 };
 
 const CUBE3D_PALETTE_HEX = {
-  U: '#ffffff', R: '#ffd500', F: '#b71234', D: '#ff5800', L: '#0046ad', B: '#009b48',
+  U: '#ffffff', R: '#009b48', F: '#b71234', D: '#ffd500', L: '#0046ad', B: '#ff5800',
 };
 const CUBE3D_INTERNAL_HEX = '#1a1a1a';
 
