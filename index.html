@@ -4065,11 +4065,16 @@ Read each grid's colors exactly as shown in the PDF -- don't infer, simplify, or
         const page1 = await pdf.getPage(1);
         const textContent = await page1.getTextContent();
         const text = textContent.items.map(i => i.str).join(' ');
-        // Look for "NxM = K cubes" pattern
+        // Look for "NxM = K cubes" pattern; width must be divisible by cubesPerRowPage.
+        // Try m[1] first, fall back to m[2] in case PDF uses height×width notation.
         const m = text.match(/(\d+)\s*[x×]\s*(\d+)\s*=\s*(\d+)\s*cube/i);
         if (m) {
-          detectedWidth = parseInt(m[1]);
+          const n1 = parseInt(m[1]), n2 = parseInt(m[2]);
           detectedTotal = parseInt(m[3]);
+          detectedWidth = (n1 % cubesPerRowPage === 0) ? n1
+                        : (n2 % cubesPerRowPage === 0) ? n2
+                        : null;
+          console.log(`PDF text dims: ${n1}×${n2}=${detectedTotal}, detectedWidth=${detectedWidth}`);
         }
       } catch(e) { /* ignore */ }
 
@@ -4095,6 +4100,7 @@ Read each grid's colors exactly as shown in the PDF -- don't infer, simplify, or
       if (detectedWidth && detectedWidth % cubesPerRowPage === 0) {
         const pagesPerRow = detectedWidth / cubesPerRowPage;
         const numPageRows = Math.ceil(pageResults.length / pagesPerRow);
+        console.log(`Reorganizing: pagesPerRow=${pagesPerRow} numPageRows=${numPageRows} totalPages=${pageResults.length}`);
         for (let pr = numPageRows - 1; pr >= 0; pr--) {
           const firstPageIdx = pr * pagesPerRow;
           const rowCubesTall = pageResults[firstPageIdx]?.cubesTall || 1;
