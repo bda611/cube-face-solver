@@ -3879,8 +3879,8 @@ Read each grid's colors exactly as shown in the PDF -- don't infer, simplify, or
       { code: 'W', r: 255, g: 255, b: 255 },
       { code: 'Y', r: 255, g: 213, b:   0 },
       { code: 'R', r: 183, g:  18, b:  52 },
-      { code: 'O', r: 255, g:  88, b:   0 },
-      { code: 'B', r:   0, g:  70, b: 173 },
+      { code: 'O', r: 255, g: 153, b:   0 },
+      { code: 'B', r:   0, g:   0, b: 255 },
       { code: 'G', r:   0, g: 155, b:  72 },
     ];
 
@@ -3901,21 +3901,50 @@ Read each grid's colors exactly as shown in the PDF -- don't infer, simplify, or
 
     function findGridBounds(imageData, w, h) {
       const d = imageData.data;
-      let minX = w, maxX = 0, minY = h, maxY = 0;
-      for (let y = 0; y < h; y++) {
-        for (let x = 0; x < w; x++) {
+      // Skip the outer 15px on every side to exclude any outer page frame border.
+      // The actual cube grid is always well within the page margins.
+      const edge = 15;
+      const rowBlack = new Int32Array(h);
+      const colBlack = new Int32Array(w);
+      for (let y = edge; y < h - edge; y++) {
+        for (let x = edge; x < w - edge; x++) {
           const i = (y * w + x) * 4;
           const r = d[i], g = d[i+1], b = d[i+2];
-          // Skip near-white (background) and near-black (borders/text)
-          const isBackground = r > 220 && g > 220 && b > 220;
-          const isBorder = r < 60 && g < 60 && b < 60;
-          if (!isBackground && !isBorder) {
-            if (x < minX) minX = x;
-            if (x > maxX) maxX = x;
-            if (y < minY) minY = y;
-            if (y > maxY) maxY = y;
+          if (r < 60 && g < 60 && b < 60) { rowBlack[y]++; colBlack[x]++; }
+        }
+      }
+      let maxRow = 0, maxCol = 0;
+      for (let y = edge; y < h - edge; y++) if (rowBlack[y] > maxRow) maxRow = rowBlack[y];
+      for (let x = edge; x < w - edge; x++) if (colBlack[x] > maxCol) maxCol = colBlack[x];
+
+      const innerW = w - 2 * edge, innerH = h - 2 * edge;
+
+      // Fall back to colored-pixel bounding box if no strong black borders found
+      if (maxRow < innerW * 0.15 || maxCol < innerH * 0.15) {
+        let minX = w, maxX = 0, minY = h, maxY = 0;
+        for (let y = edge; y < h - edge; y++) {
+          for (let x = edge; x < w - edge; x++) {
+            const i = (y * w + x) * 4;
+            const r = d[i], g = d[i+1], b = d[i+2];
+            if (!(r > 220 && g > 220 && b > 220) && !(r < 60 && g < 60 && b < 60)) {
+              if (x < minX) minX = x; if (x > maxX) maxX = x;
+              if (y < minY) minY = y; if (y > maxY) maxY = y;
+            }
           }
         }
+        return (maxX > minX && maxY > minY) ? { minX, maxX, minY, maxY } : null;
+      }
+
+      // Include only rows/columns with ≥40% of peak black-pixel count.
+      // Grid borders hit ~100% of inner width; labels hit ~10–20% → excluded.
+      const rowThr = maxRow * 0.40;
+      const colThr = maxCol * 0.40;
+      let minY = h, maxY = 0, minX = w, maxX = 0;
+      for (let y = edge; y < h - edge; y++) {
+        if (rowBlack[y] >= rowThr) { if (y < minY) minY = y; if (y > maxY) maxY = y; }
+      }
+      for (let x = edge; x < w - edge; x++) {
+        if (colBlack[x] >= colThr) { if (x < minX) minX = x; if (x > maxX) maxX = x; }
       }
       return (maxX > minX && maxY > minY) ? { minX, maxX, minY, maxY } : null;
     }
