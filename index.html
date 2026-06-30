@@ -3982,6 +3982,27 @@ Read each grid's colors exactly as shown in the PDF -- don't infer, simplify, or
       let mosaicWidth = null;
       let cubesPerRowPage = 3; // always 3 for Ruwix
 
+      // Parse page 1 dimensions before the extraction loop so we can force cubesTall=1
+      // on the bottom (1-tall) row pages during extraction — not post-hoc.
+      let detectedWidth = null;
+      let detectedTotal = null;
+      let pagesPerRow = 0;
+      try {
+        const page1 = await pdf.getPage(1);
+        const textContent = await page1.getTextContent();
+        const text = textContent.items.map(i => i.str).join(' ');
+        const m = text.match(/(\d+)\s*[x×]\s*(\d+)\s*=\s*(\d+)\s*cube/i);
+        if (m) {
+          const n1 = parseInt(m[1]), n2 = parseInt(m[2]);
+          detectedTotal = parseInt(m[3]);
+          detectedWidth = (n1 % cubesPerRowPage === 0) ? n1
+                        : (n2 % cubesPerRowPage === 0) ? n2
+                        : null;
+          if (detectedWidth) pagesPerRow = detectedWidth / cubesPerRowPage;
+          console.log(`PDF text dims: ${n1}×${n2}=${detectedTotal}, detectedWidth=${detectedWidth}`);
+        }
+      } catch(e) { /* ignore */ }
+
       const offscreenCanvas = document.createElement('canvas');
 
       for (let pageNum = 2; pageNum <= totalPages; pageNum++) {
@@ -4039,6 +4060,9 @@ Read each grid's colors exactly as shown in the PDF -- don't infer, simplify, or
             // 1-row page: ratio ≈ 0.33; 4-row page: ratio ≈ 1.33
             cubesTall = ratio < 0.6 ? 1 : 4;
           }
+          // The bottom row of the mosaic is 1-tall (mosaicHeight % 4 = 1).
+          // Force correct extraction for those pages now that we know pagesPerRow.
+          if (pagesPerRow > 0 && (pageNum - 2) < pagesPerRow) cubesTall = 1;
 
           const pageCubes = extractPageCubes(offscreenCanvas, cubesPerRowPage, cubesTall);
           if (pageCubes) {
@@ -4056,40 +4080,6 @@ Read each grid's colors exactly as shown in the PDF -- don't infer, simplify, or
         showStatus('No cube patterns found. Is this a Ruwix mosaic PDF?', 'error');
         hideProgress();
         return;
-      }
-
-      // Try to extract mosaic dimensions from page 1 text
-      let detectedWidth = null;
-      let detectedTotal = null;
-      try {
-        const page1 = await pdf.getPage(1);
-        const textContent = await page1.getTextContent();
-        const text = textContent.items.map(i => i.str).join(' ');
-        // Look for "NxM = K cubes" pattern; width must be divisible by cubesPerRowPage.
-        // Try m[1] first, fall back to m[2] in case PDF uses height×width notation.
-        const m = text.match(/(\d+)\s*[x×]\s*(\d+)\s*=\s*(\d+)\s*cube/i);
-        if (m) {
-          const n1 = parseInt(m[1]), n2 = parseInt(m[2]);
-          detectedTotal = parseInt(m[3]);
-          detectedWidth = (n1 % cubesPerRowPage === 0) ? n1
-                        : (n2 % cubesPerRowPage === 0) ? n2
-                        : null;
-          console.log(`PDF text dims: ${n1}×${n2}=${detectedTotal}, detectedWidth=${detectedWidth}`);
-        }
-      } catch(e) { /* ignore */ }
-
-      // Post-hoc fix for 1-tall pages misdetected as 4-tall.
-      // Pages are row-major, bottom-to-top. The bottom row (37 mod 4 = 1 cube tall)
-      // is the FIRST pagesPerRow pages (pageResults[0..pagesPerRow-1]).
-      const totalExtracted = pageResults.reduce((s, p) => s + p.cubes.length, 0);
-      if (detectedTotal && totalExtracted > detectedTotal && detectedWidth && detectedWidth % cubesPerRowPage === 0) {
-        const pagesPerRowFix = detectedWidth / cubesPerRowPage;
-        for (let i = 0; i < pagesPerRowFix; i++) {
-          if (pageResults[i] && pageResults[i].cubes.length > cubesPerRowPage) {
-            pageResults[i].cubes = pageResults[i].cubes.slice(0, cubesPerRowPage);
-            pageResults[i].cubesTall = 1;
-          }
-        }
       }
 
       // Ruwix PDFs are row-major, left-to-right, bottom-to-top.
