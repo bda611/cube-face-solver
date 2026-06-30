@@ -3065,7 +3065,7 @@ function allFaceOrientations(str) {
 // style instruction sheet) must be translated through this mapping
 // before it can be compared against a state string's cubejs letters --
 // they are NOT the same alphabet and must never be compared directly.
-const MOSAIC_CODE_TO_CUBE_LETTER = { W: 'U', Y: 'D', R: 'F', O: 'B', B: 'L', G: 'R' };
+const MOSAIC_CODE_TO_CUBE_LETTER = { W: 'R', Y: 'L', R: 'F', O: 'B', B: 'D', G: 'U' };
 function inverseMoves(moveStr) {
   if (!moveStr || moveStr.trim() === '') return '';
   return moveStr.trim().split(/\s+/).reverse().map(m => {
@@ -3360,7 +3360,7 @@ function paletteIdToHex(id) {
 
 // The ONE fixed color<->letter convention this whole tool uses for any
 // state string: cubejs letter U/R/F/D/L/B maps to mosaic color
-// White/Yellow/Red/Orange/Blue/Green (see MOSAIC_CODE_TO_CUBE_LETTER
+// Green/White/Red/Blue/Yellow/Orange (see MOSAIC_CODE_TO_CUBE_LETTER
 // above). Every 54-char state string pattern mode touches (a fresh
 // solved cube, a pasted export line, a verified solve result) is built
 // under this same convention, so it's always safe to translate a
@@ -5177,7 +5177,7 @@ const CUBE3D_AXIS_ANGLE = {
 };
 
 const CUBE3D_PALETTE_HEX = {
-  U: '#ffffff', R: '#009b48', F: '#b71234', D: '#ffd500', L: '#0046ad', B: '#ff5800',
+  U: '#009b48', R: '#ffffff', F: '#b71234', D: '#0046ad', L: '#ffd500', B: '#ff5800',
 };
 const CUBE3D_INTERNAL_HEX = '#1a1a1a';
 
