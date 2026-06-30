@@ -4079,15 +4079,12 @@ Read each grid's colors exactly as shown in the PDF -- don't infer, simplify, or
       } catch(e) { /* ignore */ }
 
       // Post-hoc fix for 1-tall pages misdetected as 4-tall.
-      // Ruwix PDFs are column-major (up each column, then next column). The 1-tall
-      // pages are the TOP row of each column — the last page within each column group.
-      // For numCols=9, numRowsPerCol=10: positions 9, 19, 29, ..., 89.
+      // Pages are row-major, bottom-to-top. The bottom row (37 mod 4 = 1 cube tall)
+      // is the FIRST pagesPerRow pages (pageResults[0..pagesPerRow-1]).
       const totalExtracted = pageResults.reduce((s, p) => s + p.cubes.length, 0);
       if (detectedTotal && totalExtracted > detectedTotal && detectedWidth && detectedWidth % cubesPerRowPage === 0) {
-        const numColsFix = detectedWidth / cubesPerRowPage;
-        const numRowsPerColFix = Math.ceil(pageResults.length / numColsFix);
-        for (let col = 0; col < numColsFix; col++) {
-          const i = (col + 1) * numRowsPerColFix - 1;
+        const pagesPerRowFix = detectedWidth / cubesPerRowPage;
+        for (let i = 0; i < pagesPerRowFix; i++) {
           if (pageResults[i] && pageResults[i].cubes.length > cubesPerRowPage) {
             pageResults[i].cubes = pageResults[i].cubes.slice(0, cubesPerRowPage);
             pageResults[i].cubesTall = 1;
@@ -4095,19 +4092,18 @@ Read each grid's colors exactly as shown in the PDF -- don't infer, simplify, or
         }
       }
 
-      // Ruwix PDFs are column-major: pages go bottom-to-top within each column,
-      // then left-to-right across columns. Reorganize into mosaic row-major order
-      // (top→bottom, left→right) for correct preview rendering.
+      // Ruwix PDFs are row-major, left-to-right, bottom-to-top.
+      // Reorganize into mosaic row-major (top→bottom, left→right) for preview.
       if (detectedWidth && detectedWidth % cubesPerRowPage === 0) {
-        const numCols = detectedWidth / cubesPerRowPage;
-        const numRowsPerCol = Math.ceil(pageResults.length / numCols);
-        console.log(`Reorganizing (col-major): numCols=${numCols} numRowsPerCol=${numRowsPerCol} totalPages=${pageResults.length}`);
-        for (let pr = numRowsPerCol - 1; pr >= 0; pr--) {
-          const rowCubesTall = pageResults[pr]?.cubesTall || 1;
+        const pagesPerRow = detectedWidth / cubesPerRowPage;
+        const numPageRows = Math.ceil(pageResults.length / pagesPerRow);
+        console.log(`Reorganizing (row-major): pagesPerRow=${pagesPerRow} numPageRows=${numPageRows} totalPages=${pageResults.length}`);
+        for (let pr = numPageRows - 1; pr >= 0; pr--) {
+          const firstPageIdx = pr * pagesPerRow;
+          const rowCubesTall = pageResults[firstPageIdx]?.cubesTall || 1;
           for (let cr = 0; cr < rowCubesTall; cr++) {
-            for (let pc = 0; pc < numCols; pc++) {
-              const pageIdx = pc * numRowsPerCol + pr;
-              const pg = pageResults[pageIdx];
+            for (let pc = 0; pc < pagesPerRow; pc++) {
+              const pg = pageResults[firstPageIdx + pc];
               if (!pg) continue;
               for (let cc = 0; cc < cubesPerRowPage; cc++) {
                 const cubeIdx = cr * cubesPerRowPage + cc;
