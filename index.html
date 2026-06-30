@@ -3764,7 +3764,7 @@ function renderPatternMode() {
           <p class="panel-desc" style="margin-bottom:8px; font-size:0.8rem;">Use this Claude prompt with the PDF attached:</p>
           <div class="claude-prompt-box" id="claudeConversionPrompt">Convert this Ruwix mosaic instruction PDF into plain text I can paste into my Cube Face Solver tool.
 
-Read each grid's colors exactly as shown in the PDF -- don't infer, simplify, or smooth over isolated single-color tiles. Convert every 3x3 grid into one 9-character line using only W=White, Y=Yellow, R=Red, O=Orange, B=Blue, G=Green, no other letters or punctuation. Read each grid row-major (left-to-right within a row, top row first). Output one line per cube in the same order the PDF lists/arranges the cubes -- if the mosaic is a 2D grid, confirm row-by-row left-to-right, top-to-bottom ordering before converting. Give me the result as bare 9-letter lines only in one code block, no row labels or commentary between lines, so I can paste the whole block directly into the tool. If the PDF uses a different color scheme than W/Y/R/O/B/G, tell me what you see and confirm the mapping with me first. Also tell me the total number of cubes and the mosaic's width (cubes per row).</div>
+Read each grid's colors exactly as shown in the PDF -- don't infer, simplify, or smooth over isolated single-color tiles. Convert every 3x3 grid into one 9-character line using only W=White, Y=Yellow, R=Red, O=Orange, B=Blue, G=Green, no other letters or punctuation. Read each grid row-major (left-to-right within a row, top row first). Output one line per cube in the same order the PDF lists/arranges the cubes -- the PDF starts at the bottom-left corner, goes left-to-right along each row, then moves up a row and repeats. Give me the result as bare 9-letter lines only in one code block, no row labels or commentary between lines, so I can paste the whole block directly into the tool. If the PDF uses a different color scheme than W/Y/R/O/B/G, tell me what you see and confirm the mapping with me first. Also tell me the total number of cubes and the mosaic's width (cubes per row).</div>
           <button class="secondary-btn" id="copyConversionPromptBtn" style="margin:8px 0 0;">Copy prompt</button>
         </div>
       </details>
@@ -3772,7 +3772,7 @@ Read each grid's colors exactly as shown in the PDF -- don't infer, simplify, or
 
     <h2 class="section-heading">Target mosaic</h2>
     <div class="panel">
-      <p class="panel-desc">Paste this mosaic's target patterns: one 9-letter W/Y/R/O/B/G line per cube, in mosaic order, read left-to-right top-to-bottom. Example line: <code>WYROBGWYR</code>.</p>
+      <p class="panel-desc">Paste this mosaic's target patterns: one 9-letter W/Y/R/O/B/G line per cube, in mosaic order, starting at the bottom-left &mdash; left-to-right along each row, bottom row first. Example line: <code>WYROBGWYR</code>.</p>
       <textarea class="pattern-input" id="patternTargetBox" placeholder="WYROBGWYR&#10;OOOOOOOOO&#10;GGGYYYBBB&#10;..." aria-label="Target mosaic patterns, one 9-letter W Y R O B G line per cube">${appState.patternTargetInput.replace(/</g, '&lt;')}</textarea>
       <div id="targetCountCheckArea" aria-live="polite"></div>
       <div class="matcher-row">
@@ -3783,7 +3783,7 @@ Read each grid's colors exactly as shown in the PDF -- don't infer, simplify, or
         <label for="mosaicWidthInput">Mosaic width in cubes (optional, for a visual preview):</label>
         <input type="number" min="1" id="mosaicWidthInput" value="${appState.patternMosaicWidth ?? ''}" placeholder="e.g. 30">
       </div>
-      <p class="panel-desc" style="margin-top:6px;">Line 1 of your pasted list is treated as row 1, column 1 (top-left), reading left-to-right then down, same as the preview grid below and the row/col labels in your results. If your mosaic instructions number things differently, line your list up with THIS convention before pasting.</p>
+      <p class="panel-desc" style="margin-top:6px;">Line 1 of your pasted list is treated as row 1, column 1 (bottom-left), reading left-to-right then up &mdash; matching the PDF's ordering. The preview grid below shows the mosaic with the bottom row at the bottom, matching your source image.</p>
       <div id="mosaicPreviewArea"></div>
     </div>
 
@@ -4116,15 +4116,15 @@ Read each grid's colors exactly as shown in the PDF -- don't infer, simplify, or
       }
 
       // Ruwix PDFs are row-major, left-to-right, bottom-to-top.
-      // Reorganize into mosaic row-major (top→bottom, left→right) for preview.
+      // Preserve that order (bottom→top, left→right) to match PDF input convention.
       if (detectedWidth && detectedWidth % cubesPerRowPage === 0) {
         const pagesPerRow = detectedWidth / cubesPerRowPage;
         const numPageRows = Math.ceil(pageResults.length / pagesPerRow);
         console.log(`Reorganizing (row-major): pagesPerRow=${pagesPerRow} numPageRows=${numPageRows} totalPages=${pageResults.length}`);
-        for (let pr = numPageRows - 1; pr >= 0; pr--) {
+        for (let pr = 0; pr < numPageRows; pr++) {
           const firstPageIdx = pr * pagesPerRow;
           const rowCubesTall = pageResults[firstPageIdx]?.cubesTall || 1;
-          for (let cr = rowCubesTall - 1; cr >= 0; cr--) {
+          for (let cr = 0; cr < rowCubesTall; cr++) {
             for (let pc = 0; pc < pagesPerRow; pc++) {
               const pg = pageResults[firstPageIdx + pc];
               if (!pg) continue;
@@ -4353,7 +4353,7 @@ function buildCubeViewerMinimapHtml(targetsInput, width, currentLineNum) {
   // --- Close-up: a fixed neighborhood window around the current cube ---
   const HALF = 3; // 7x7 window
   const closeupCells = [];
-  for (let r = cur.row - HALF; r <= cur.row + HALF; r++) {
+  for (let r = cur.row + HALF; r >= cur.row - HALF; r--) {
     for (let c = cur.col - HALF; c <= cur.col + HALF; c++) {
       const inBounds = r >= 1 && r <= rows && c >= 1 && c <= width;
       const isCurrent = r === cur.row && c === cur.col;
@@ -4383,11 +4383,12 @@ function buildCubeViewerMinimapHtml(targetsInput, width, currentLineNum) {
   for (let i = 0; i < targets.length; i++) {
     const hex = colorFor(i + 1);
     ctx.fillStyle = hex || '#1c1a17';
-    const r = Math.floor(i / width), c = i % width;
-    ctx.fillRect(c * cellPx, r * cellPx, cellPx, cellPx);
+    const dataRow = Math.floor(i / width), c = i % width;
+    const visualRow = (rows - 1) - dataRow;
+    ctx.fillRect(c * cellPx, visualRow * cellPx, cellPx, cellPx);
   }
   const markerLeft = (cur.col - 0.5) * cellPx;
-  const markerTop = (cur.row - 0.5) * cellPx;
+  const markerTop = (rows - cur.row + 0.5) * cellPx;
   const thumb = `
     <div class="cube-viewer-minimap-thumb-wrap">
       <div class="cube-viewer-minimap-thumb" style="width:${thumbW}px; height:${thumbH}px;">
@@ -4420,10 +4421,13 @@ function renderMosaicPreview() {
   // meaningfully faster than += in a loop once this runs into the
   // thousands of cells (a real mosaic can be many hundreds of cubes).
   const cellParts = [];
-  for (let i = 0; i < rows * width; i++) {
-    const target = targets[i];
-    const hex = target ? paletteIdToHex(CODE_TO_PALETTE_ID[target.mosaicPattern[4]]) : '#000';
-    cellParts.push(`<div style="width:${cellPx}px; height:${cellPx}px; background:${hex};"></div>`);
+  for (let visualRow = 0; visualRow < rows; visualRow++) {
+    const dataRow = rows - 1 - visualRow;
+    for (let col = 0; col < width; col++) {
+      const target = targets[dataRow * width + col];
+      const hex = target ? paletteIdToHex(CODE_TO_PALETTE_ID[target.mosaicPattern[4]]) : '#000';
+      cellParts.push(`<div style="width:${cellPx}px; height:${cellPx}px; background:${hex};"></div>`);
+    }
   }
   const grid = `<div aria-hidden="true" style="margin-top:10px; display:grid; grid-template-columns:repeat(${width}, ${cellPx}px); gap:1px; background:#000; padding:4px; border-radius:6px; width:fit-content; max-width:100%; overflow:auto;">${cellParts.join('')}</div>`;
   const caption = `<p class="panel-desc" style="margin-top:6px;">${targets.length} cube${targets.length === 1 ? '' : 's'} across ${rows} row${rows === 1 ? '' : 's'} of ${width}. Check this matches your source image's shape before submitting.</p>`;
