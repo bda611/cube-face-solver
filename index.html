@@ -4112,7 +4112,7 @@ Read each grid's colors exactly as shown in the PDF -- don't infer, simplify, or
       const widthInput = document.getElementById('mosaicWidthInput');
 
       if (textarea) {
-        textarea.value = allCubes.join('\n');
+        textarea.value = allCubes.join('\n') + '\n';
         appState.patternTargetInput = textarea.value;
         appState.patternPlanState = null;
         appState.patternCountMismatchAcked = false;
