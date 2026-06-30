@@ -3978,6 +3978,7 @@ Read each grid's colors exactly as shown in the PDF -- don't infer, simplify, or
       // We detect cubesTall by checking the aspect ratio of the grid on the page.
 
       const allCubes = [];
+      const pageResults = []; // per-page {cubes, cubesTall} for mosaic-row reorganization
       let mosaicWidth = null;
       let cubesPerRowPage = 3; // always 3 for Ruwix
 
@@ -4041,12 +4042,7 @@ Read each grid's colors exactly as shown in the PDF -- don't infer, simplify, or
 
           const pageCubes = extractPageCubes(offscreenCanvas, cubesPerRowPage, cubesTall);
           if (pageCubes) {
-            // Track mosaic width: all pages have cubesPerRowPage × (page column count)
-            // The mosaic width = total columns = cubesPerRowPage × 9 pages per row
-            // We can infer from totalPages: (totalPages - 1) pages, structured as
-            // 9 row-1 pages + 9*9 subsequent pages. But easier: width from PDF title.
-            // For now accumulate and we'll set width after.
-            allCubes.push(...pageCubes);
+            pageResults.push({ cubes: pageCubes, cubesTall });
           }
 
           const pct = Math.round(((pageNum - 1) / (totalPages - 1)) * 100);
@@ -4056,7 +4052,7 @@ Read each grid's colors exactly as shown in the PDF -- don't infer, simplify, or
         }
       }
 
-      if (allCubes.length === 0) {
+      if (pageResults.length === 0) {
         showStatus('No cube patterns found. Is this a Ruwix mosaic PDF?', 'error');
         hideProgress();
         return;
@@ -4079,24 +4075,42 @@ Read each grid's colors exactly as shown in the PDF -- don't infer, simplify, or
 
       // Post-hoc fix for 1-tall pages misdetected as 4-tall.
       // On a 1-tall page the legend fills the remaining page height, making its
-      // bounds identical to a 4-tall page — no content-based detector can tell
-      // them apart. But cubeRow=0 samples the correct cube positions either way
-      // (cellH is the same), so we just discard rows 1-3 from those pages.
-      if (detectedTotal && allCubes.length > detectedTotal) {
-        const excess = allCubes.length - detectedTotal;
-        const extraPerPage = cubesPerRowPage * 3; // cubes added by misdetecting 1-tall as 4-tall
+      // bounds identical to a 4-tall page. cubeRow=0 samples the correct cube
+      // positions (cellH works out the same), so trim rows 1-3 from those pages.
+      const totalExtracted = pageResults.reduce((s, p) => s + p.cubes.length, 0);
+      if (detectedTotal && totalExtracted > detectedTotal) {
+        const excess = totalExtracted - detectedTotal;
+        const extraPerPage = cubesPerRowPage * 3;
         if (excess % extraPerPage === 0) {
           const badPageCount = excess / extraPerPage;
-          const cubesPerFullPage = cubesPerRowPage * 4;
-          const goodUpTo = allCubes.length - badPageCount * cubesPerFullPage;
-          const fixed = allCubes.slice(0, goodUpTo);
-          for (let i = 0; i < badPageCount; i++) {
-            const base = goodUpTo + i * cubesPerFullPage;
-            for (let j = 0; j < cubesPerRowPage; j++) fixed.push(allCubes[base + j]);
+          for (let i = pageResults.length - badPageCount; i < pageResults.length; i++) {
+            pageResults[i].cubes = pageResults[i].cubes.slice(0, cubesPerRowPage);
+            pageResults[i].cubesTall = 1;
           }
-          allCubes.length = 0;
-          allCubes.push(...fixed);
         }
+      }
+
+      // Ruwix PDFs are ordered bottom-to-top, left-to-right within each row.
+      // Reorganize from page-major into mosaic row-major (top→bottom, left→right).
+      if (detectedWidth && detectedWidth % cubesPerRowPage === 0) {
+        const pagesPerRow = detectedWidth / cubesPerRowPage;
+        const numPageRows = Math.ceil(pageResults.length / pagesPerRow);
+        for (let pr = numPageRows - 1; pr >= 0; pr--) {
+          const firstPageIdx = pr * pagesPerRow;
+          const rowCubesTall = pageResults[firstPageIdx]?.cubesTall || 1;
+          for (let cr = 0; cr < rowCubesTall; cr++) {
+            for (let pc = 0; pc < pagesPerRow; pc++) {
+              const pg = pageResults[firstPageIdx + pc];
+              if (!pg) continue;
+              for (let cc = 0; cc < cubesPerRowPage; cc++) {
+                const cubeIdx = cr * cubesPerRowPage + cc;
+                if (cubeIdx < pg.cubes.length) allCubes.push(pg.cubes[cubeIdx]);
+              }
+            }
+          }
+        }
+      } else {
+        for (const pg of pageResults) allCubes.push(...pg.cubes);
       }
 
       // Populate the target textarea
