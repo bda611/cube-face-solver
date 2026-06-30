@@ -3949,23 +3949,33 @@ Read each grid's colors exactly as shown in the PDF -- don't infer, simplify, or
       return (maxX > minX && maxY > minY) ? { minX, maxX, minY, maxY } : null;
     }
 
-    // Sample the color at the center of a cell, averaging a small patch
+    // Sample the color at the center of a cell using per-pixel voting.
+    // Each chromatic pixel casts a vote for its classified color; the plurality wins.
+    // Voting avoids the averaging artifact where orange + white pixels average to yellow.
+    // Black borders and neutral grays (labels/thumbnails) are excluded from voting.
     function sampleCell(imageData, w, cx, cy, patchRadius) {
       const d = imageData.data;
       const r = patchRadius || 4;
-      let rSum = 0, gSum = 0, bSum = 0, count = 0;
+      const votes = {};
       for (let dy = -r; dy <= r; dy++) {
         for (let dx = -r; dx <= r; dx++) {
           const px = Math.round(cx + dx);
           const py = Math.round(cy + dy);
           if (px < 0 || py < 0 || px >= w || py >= imageData.height) continue;
           const i = (py * w + px) * 4;
-          rSum += d[i]; gSum += d[i+1]; bSum += d[i+2];
-          count++;
+          const pr = d[i], pg = d[i+1], pb = d[i+2];
+          const maxC = Math.max(pr, pg, pb);
+          if (maxC < 80) continue; // black border
+          if (maxC - Math.min(pr, pg, pb) < 30 && maxC < 220) continue; // neutral gray, not white
+          const code = classifyColor(pr, pg, pb);
+          votes[code] = (votes[code] || 0) + 1;
         }
       }
-      if (!count) return 'W';
-      return classifyColor(Math.round(rSum/count), Math.round(gSum/count), Math.round(bSum/count));
+      let best = 'W', bestCount = 0;
+      for (const code in votes) {
+        if (votes[code] > bestCount) { bestCount = votes[code]; best = code; }
+      }
+      return best;
     }
 
     // Extract cube patterns from one rendered canvas page.
@@ -3985,7 +3995,7 @@ Read each grid's colors exactly as shown in the PDF -- don't infer, simplify, or
       // Each cube is 3 cells wide × 3 cells tall
       const cellW = gridW / (cubesWide * 3);
       const cellH = gridH / (cubesTall * 3);
-      const patchR = Math.max(2, Math.floor(Math.min(cellW, cellH) * 0.25));
+      const patchR = Math.max(2, Math.floor(Math.min(cellW, cellH) * 0.15));
 
       const cubes = [];
       for (let cubeRow = 0; cubeRow < cubesTall; cubeRow++) {
