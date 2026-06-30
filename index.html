@@ -4032,6 +4032,8 @@ Read each grid's colors exactly as shown in the PDF -- don't infer, simplify, or
           console.log(`PDF text dims: ${n1}×${n2}=${detectedTotal}, detectedWidth=${detectedWidth}`);
         }
       } catch(e) { /* ignore */ }
+      const detectedHeight = (detectedWidth && detectedTotal) ? Math.round(detectedTotal / detectedWidth) : null;
+      const bottomRowCubesTall = detectedHeight ? (detectedHeight % 4 || 4) : null;
 
       const offscreenCanvas = document.createElement('canvas');
 
@@ -4088,11 +4090,12 @@ Read each grid's colors exactly as shown in the PDF -- don't infer, simplify, or
             }
             const ratio = gridH / gridW;
             // 1-row page: ratio ≈ 0.33; 4-row page: ratio ≈ 1.33
-            cubesTall = ratio < 0.6 ? 1 : 4;
+            // Thresholds midway between expected ratios: 0.33 (1-tall), 0.67 (2-tall), 1.00 (3-tall), 1.33 (4-tall)
+            cubesTall = ratio < 0.5 ? 1 : ratio < 0.85 ? 2 : ratio < 1.17 ? 3 : 4;
           }
-          // The bottom row of the mosaic is 1-tall (mosaicHeight % 4 = 1).
-          // Force correct extraction for those pages now that we know pagesPerRow.
-          if (pagesPerRow > 0 && (pageNum - 2) < pagesPerRow) cubesTall = 1;
+          // The bottom page-row may be shorter than 4 cubes tall (height % 4 remainder).
+          // Override detection with the value derived from the PDF's stated dimensions.
+          if (pagesPerRow > 0 && bottomRowCubesTall !== null && (pageNum - 2) < pagesPerRow) cubesTall = bottomRowCubesTall;
 
           const pageCubes = extractPageCubes(offscreenCanvas, cubesPerRowPage, cubesTall);
           if (pageCubes) {
