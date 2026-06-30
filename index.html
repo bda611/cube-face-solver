@@ -513,6 +513,28 @@
   }
   .match-item.solve-item { background: #1e2430; border-color: #2d3d4a; }
   .match-item .match-badge.badge-solve { background: var(--accent); }
+  .row-section { margin-top: 6px; }
+  .row-section summary {
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: 7px;
+    background: #1a1a1a;
+    border: 1px solid #333;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    user-select: none;
+    color: var(--text);
+  }
+  .row-section summary::-webkit-details-marker { display: none; }
+  .row-section summary::before { content: '▶'; font-size: 0.6rem; color: var(--text-dim); transition: transform 0.15s; display: inline-block; }
+  .row-section[open] summary::before { transform: rotate(90deg); }
+  .row-section summary .row-progress { margin-left: auto; font-size: 0.7rem; font-weight: 400; color: var(--text-dim); }
+  .row-section summary .row-done { color: var(--success); }
+  .row-section .match-list { margin-top: 4px; }
 
   .source-cards { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
   .source-card {
@@ -4600,9 +4622,8 @@ function renderPlanResult() {
       ${planState.status !== 'running' ? `<div class="match-stat free"><div class="num">${placedCount}/${planState.placements.length}</div><div class="lbl">physically placed</div></div>` : ''}
     </div>
     ${rowFilterBlock}
-    ${planState.placements.length > 0 ? `
-    <div class="match-list">
-      ${visiblePlacements.map((p) => {
+    ${planState.placements.length > 0 ? (() => {
+      const renderItem = (p) => {
         const i = planState.placements.indexOf(p);
         const pos = gridPositionForLine(p.targetLineNum, width);
         const posLabel = pos ? `row ${pos.row}, col ${pos.col}` : `line ${p.targetLineNum}`;
@@ -4620,12 +4641,35 @@ function renderPlanResult() {
           ${(planState.status !== 'running' && p.type === 'solve') ? `<button class="cube-viewer-trigger" style="border:none; border-radius:6px; padding:4px 8px; font-size:0.7rem; cursor:pointer; flex-shrink:0;" id="showMeBtn${i}" aria-label="Show 3D turn-by-turn animation for target ${posLabel}, pattern ${p.mosaicPattern}">▶ Show me</button>` : ''}
           ${planState.status !== 'running' ? `<button type="button" class="reset-link" style="margin:0; font-size:0.7rem; flex-shrink:0;" id="editRowBtn${i}" aria-label="Fix target ${posLabel}, pattern ${p.mosaicPattern}">fix</button>` : ''}
         </div>
-        <div id="editRowArea${i}" aria-live="polite"></div>
-      `;
-      }).join('')}
-    </div>
-    ${filterActive && visiblePlacements.length === 0 ? '<p class="panel-desc">No targets in that row range.</p>' : ''}
-    ` : '<p class="panel-desc">No placements produced yet.</p>'}
+        <div id="editRowArea${i}" aria-live="polite"></div>`;
+      };
+
+      if (width) {
+        // Group by mosaic row
+        const byRow = new Map();
+        visiblePlacements.forEach(p => {
+          const pos = gridPositionForLine(p.targetLineNum, width);
+          const rowNum = pos ? pos.row : 0;
+          if (!byRow.has(rowNum)) byRow.set(rowNum, []);
+          byRow.get(rowNum).push(p);
+        });
+        if (byRow.size === 0) return '<p class="panel-desc">No targets in that row range.</p>';
+        return [...byRow.entries()].map(([rowNum, rowPlacements]) => {
+          const placedInRow = rowPlacements.filter(p => p.placed).length;
+          const allDone = placedInRow === rowPlacements.length;
+          const label = rowNum === 0 ? 'Unknown row' : `Row ${rowNum}`;
+          const progressLabel = allDone
+            ? `<span class="row-done">✓ all ${rowPlacements.length} placed</span>`
+            : `<span>${placedInRow}/${rowPlacements.length} placed</span>`;
+          return `<details class="row-section"${allDone ? '' : ' open'}>
+            <summary>${label}<span class="row-progress">${progressLabel}</span></summary>
+            <div class="match-list">${rowPlacements.map(renderItem).join('')}</div>
+          </details>`;
+        }).join('');
+      }
+      return `<div class="match-list">${visiblePlacements.map(renderItem).join('')}</div>
+        ${filterActive && visiblePlacements.length === 0 ? '<p class="panel-desc">No targets in that row range.</p>' : ''}`;
+    })() : '<p class="panel-desc">No placements produced yet.</p>'}
     ${errorBlock}
     ${planState.status !== 'running' ? `
     <div style="display:flex; gap:8px; margin-top:12px;">
