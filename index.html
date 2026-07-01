@@ -665,6 +665,19 @@
   .cube-orient-bottom { bottom: 8px; left: 50%; transform: translateX(-50%); }
   .cube-orient-left   { left: 8px;   top: 50%;  transform: translateY(-50%); }
   .cube-orient-right  { right: 8px;  top: 50%;  transform: translateY(-50%); }
+  .cube-viewer-snapshots { padding: 6px 16px 0; }
+  .cube-snapshot-move-desc { font-size:0.72rem; font-weight:600; color:#e0e0e0; text-align:center; margin-bottom:6px; }
+  .cube-viewer-snapshots-row { display:flex; gap:10px; justify-content:center; align-items:flex-start; }
+  .cube-snapshot-block { display:flex; flex-direction:column; align-items:center; gap:3px; }
+  .cube-snapshot-label { font-size:0.6rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.05em; }
+  .cube-snapshot-faces { display:flex; flex-direction:column; align-items:center; gap:1px; }
+  .cube-snapshot-face-row { display:flex; gap:1px; }
+  .cube-snapshot-face-wrap { display:flex; flex-direction:column; align-items:center; gap:1px; }
+  .cube-snapshot-face-name { font-size:0.5rem; color:var(--text-dim); }
+  .cube-snapshot-grid { display:grid; grid-template-columns:repeat(3,13px); gap:1px; background:rgba(255,255,255,0.08); border-radius:2px; padding:1px; }
+  .cube-snapshot-cell { width:13px; height:13px; border-radius:1px; }
+  .cube-snapshot-cell.changed { box-shadow:0 0 0 2px rgba(255,255,255,0.85) inset; }
+  .cube-snapshot-arrow { font-size:1.1rem; color:var(--text-dim); padding-top:22px; }
   .cube-viewer-minimap {
     display: flex;
     align-items: flex-start;
@@ -5515,6 +5528,70 @@ function cubeViewerNavigableIndices(planState) {
   return indices;
 }
 
+// Returns the 54-char cube state after applying the first `step` moves from startStr.
+function cubeViewerStateAtStep(startStr, movesArr, step) {
+  const c = Cube.fromString(startStr);
+  const n = Math.min(step, movesArr.length);
+  if (n > 0) c.move(movesArr.slice(0, n).join(' '));
+  return c.asString();
+}
+
+// Returns HTML for a labeled 3×3 face grid. changedSet is Set<"r,c"> to highlight.
+function cubeSnapshotGrid(stateStr, face, changedSet) {
+  const grid = faceGridFromString(stateStr, face);
+  let cells = '';
+  for (let r = 0; r < 3; r++) {
+    for (let c = 0; c < 3; c++) {
+      const hex = CUBE3D_PALETTE_HEX[grid[r][c]] || '#333';
+      const cls = (changedSet && changedSet.has(`${r},${c}`)) ? ' changed' : '';
+      cells += `<div class="cube-snapshot-cell${cls}" style="background:${hex}"></div>`;
+    }
+  }
+  return `<div class="cube-snapshot-face-wrap"><div class="cube-snapshot-face-name">${face}</div><div class="cube-snapshot-grid">${cells}</div></div>`;
+}
+
+// Computes which cells in `face` differ between beforeStr and afterStr.
+function cubeSnapshotDiff(beforeStr, afterStr, face) {
+  const bg = faceGridFromString(beforeStr, face);
+  const ag = faceGridFromString(afterStr, face);
+  const s = new Set();
+  for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) if (bg[r][c] !== ag[r][c]) s.add(`${r},${c}`);
+  return s;
+}
+
+// Builds the before/after snapshot panel HTML for the current step.
+function renderCubeViewerSnapshots(startStr, movesArr, step) {
+  if (!movesArr.length || step >= movesArr.length) return '';
+  const beforeStr = cubeViewerStateAtStep(startStr, movesArr, step);
+  const afterStr  = cubeViewerStateAtStep(startStr, movesArr, step + 1);
+  const token = movesArr[step];
+  const moveFace = token[0];
+  const isDouble = token.includes('2');
+  const isCCW    = token.includes("'");
+  const dir = isDouble ? '180°' : isCCW ? 'counter-clockwise ↺' : 'clockwise ↻';
+  const moveDesc = `${FACE_FULL_NAMES[moveFace]} face &mdash; ${dir}`;
+  const dU = cubeSnapshotDiff(beforeStr, afterStr, 'U');
+  const dF = cubeSnapshotDiff(beforeStr, afterStr, 'F');
+  const dR = cubeSnapshotDiff(beforeStr, afterStr, 'R');
+  function snapshot(str, label) {
+    return `<div class="cube-snapshot-block">
+      <div class="cube-snapshot-label">${label}</div>
+      <div class="cube-snapshot-faces">
+        <div class="cube-snapshot-face-row">${cubeSnapshotGrid(str, 'U', dU)}</div>
+        <div class="cube-snapshot-face-row">${cubeSnapshotGrid(str, 'F', dF)}${cubeSnapshotGrid(str, 'R', dR)}</div>
+      </div>
+    </div>`;
+  }
+  return `<div class="cube-viewer-snapshots">
+    <div class="cube-snapshot-move-desc">${moveDesc}</div>
+    <div class="cube-viewer-snapshots-row">
+      ${snapshot(beforeStr, 'Before')}
+      <div class="cube-snapshot-arrow">→</div>
+      ${snapshot(afterStr, 'After')}
+    </div>
+  </div>`;
+}
+
 function openCubeViewer(placementIndex) {
   if (typeof THREE === 'undefined') {
     alert("The 3D viewer couldn't load (this needs an internet connection to fetch the Three.js library). The text instructions above still work fine without it.");
@@ -5567,6 +5644,7 @@ function openCubeViewer(placementIndex) {
         ${orientLabel('left', 'L')}
         <div class="cube-viewer-canvas-wrap" id="cubeViewerCanvasWrap"></div>
       </div>
+      <div id="cubeViewerSnapshots"></div>
       <div class="cube-viewer-step-label" id="cubeViewerStepLabel"></div>
       <div class="cube-viewer-moves-strip" id="cubeViewerMovesStrip" tabindex="0" role="group" aria-label="Full move sequence, scrollable"></div>
       <div class="cube-viewer-controls">
@@ -5644,6 +5722,8 @@ function openCubeViewer(placementIndex) {
         label.innerHTML = `Turn <strong style="font-size:1.5rem; font-family:'SF Mono',Monaco,monospace;">${nextMove}</strong> next &nbsp;<span style="color:var(--text-dim);">(move ${v.currentStep + 1} of ${v.totalSteps})</span>`;
       }
     }
+    const snapshots = document.getElementById('cubeViewerSnapshots');
+    if (snapshots) snapshots.innerHTML = renderCubeViewerSnapshots(placement.startStr, v.moves, v.currentStep);
     const strip = document.getElementById('cubeViewerMovesStrip');
     if (strip) {
       strip.innerHTML = v.moves.map((m, i) => `<span class="cube-viewer-move-chip ${i === v.currentStep ? 'current' : ''} ${i < v.currentStep ? 'done' : ''}">${m}</span>`).join('');
