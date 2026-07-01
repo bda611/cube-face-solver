@@ -5255,7 +5255,10 @@ function runPlanLoop() {
   if (planState.status === 'running') {
     setTimeout(runPlanLoop, 0);
   } else {
-    clearPlanRunProgress(); // finished (or cancelled) -- nothing left to resume
+    // Keep completed plans in storage so returning to the page restores progress.
+    // Only clear cancelled plans (no point restoring an incomplete, abandoned run).
+    if (planState.status === 'done') savePlanRunProgress(planState);
+    else clearPlanRunProgress();
     announcePlanStatus(planState.status === 'cancelled'
       ? `Cancelled at ${planState.doneCount} of ${planState.totalCount} cubes.`
       : `Mosaic plan finished. ${planState.doneCount} of ${planState.totalCount} cubes worked out${planState.errors.length > 0 ? `, ${planState.errors.length} with issues` : ''}.`);
@@ -5937,6 +5940,18 @@ window.addEventListener('load', () => {
     } catch (e) {
       document.getElementById('app').innerHTML = `<div class="loading-msg">Failed to load solver: ${e.message}</div>`;
       return;
+    }
+    // Auto-restore a completed plan from a previous session so the user
+    // returns to exactly where they left off (checked boxes and all).
+    // Running plans are handled separately via the Resume button in renderPlanResult.
+    const savedPlan = loadPlanRunProgress();
+    if (savedPlan && savedPlan.status === 'done') {
+      appState.patternPlanState = savedPlan;
+      appState.patternTargetInput = savedPlan.targetsInput || '';
+      if (savedPlan.mosaicWidth) appState.patternMosaicWidth = savedPlan.mosaicWidth;
+      if (savedPlan.sectionWidth) appState.patternSectionWidth = savedPlan.sectionWidth;
+      if (savedPlan.sectionHeight) appState.patternSectionHeight = savedPlan.sectionHeight;
+      if (savedPlan.sectionFirstHeight != null) appState.patternSectionFirstHeight = savedPlan.sectionFirstHeight;
     }
     render();
   }, 50);
