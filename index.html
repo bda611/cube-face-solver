@@ -3326,6 +3326,8 @@ let appState = {
   // narrow hundreds of placements down to just the physical section
   // of the mosaic you're currently working through. { from, to } | null.
   patternPlanRowFilter: null,
+  patternSearchFilter: '',
+  patternSortEasyFirst: false,
   patternSectionWidth: 3,        // cubes per column-section (A, B, C…)
   patternSectionHeight: 4,       // cubes per row-section (1, 2, 3…) for sections 2+
   patternSectionFirstHeight: 1,  // row height of the bottom section (section 1) if different
@@ -4817,22 +4819,28 @@ function renderPlanResult() {
   // right now, instead of scrolling through hundreds of entries.
   const filter = appState.patternPlanRowFilter;
   const filterActive = width && filter && (filter.from || filter.to);
+  const patternSearch = (appState.patternSearchFilter || '').toUpperCase().trim();
   const visiblePlacements = planState.placements.filter(p => {
-    if (!filterActive) return true;
-    const pos = gridPositionForLine(p.targetLineNum, width);
-    if (!pos) return true;
-    if (filter.from && pos.row < filter.from) return false;
-    if (filter.to && pos.row > filter.to) return false;
+    if (filterActive) {
+      const pos = gridPositionForLine(p.targetLineNum, width);
+      if (pos) {
+        if (filter.from && pos.row < filter.from) return false;
+        if (filter.to && pos.row > filter.to) return false;
+      }
+    }
+    if (patternSearch && !p.mosaicPattern.includes(patternSearch)) return false;
     return true;
   });
 
-  const rowFilterBlock = (width && planState.status !== 'running') ? `
-    <div class="matcher-row" style="margin-top:10px;">
-      <label for="rowFilterFrom">Show rows</label>
+  const rowFilterBlock = (planState.status !== 'running') ? `
+    <div class="matcher-row" style="margin-top:10px; flex-wrap:wrap; gap:6px 12px;">
+      ${width ? `<label for="rowFilterFrom">Show rows</label>
       <input type="number" min="1" id="rowFilterFrom" value="${filter && filter.from ? filter.from : ''}" placeholder="from" style="width:60px;">
       <label for="rowFilterTo">to</label>
       <input type="number" min="1" id="rowFilterTo" value="${filter && filter.to ? filter.to : ''}" placeholder="to" style="width:60px;">
-      ${filterActive ? `<button type="button" class="reset-link" style="margin:0;" id="clearRowFilterBtn">show all</button>` : ''}
+      ${filterActive ? `<button type="button" class="reset-link" style="margin:0;" id="clearRowFilterBtn">show all</button>` : ''}` : ''}
+      <input type="text" id="patternSearchInput" placeholder="Search pattern…" value="${appState.patternSearchFilter || ''}" style="width:130px; font-size:0.78rem; padding:3px 7px; border-radius:5px; border:1px solid var(--border); background:#111; color:var(--text);" aria-label="Filter placements by mosaic pattern">
+      ${patternSearch ? `<button type="button" class="reset-link" style="margin:0;" id="clearPatternSearchBtn">&#10005;</button>` : ''}
     </div>
   ` : '';
 
@@ -4920,16 +4928,20 @@ function renderPlanResult() {
               const displayItems = appState.patternSortEasyFirst
                 ? [...items].sort((a, b) => a.moveCount - b.moveCount)
                 : items;
+              const secPct = items.length === 0 ? 0 : Math.round(100 * secPlaced / items.length);
               return `<div class="section-group">
                 <div class="section-group-header${secDone ? ' section-done' : ''}">
-                  Section ${sec}<span class="section-group-progress">${secDone ? `✓ ${items.length}` : `${secPlaced}/${items.length} placed`}</span>
+                  Section ${sec}<span class="section-group-progress" style="display:flex;align-items:center;gap:5px;margin-left:auto;">${secDone ? `<span>✓ ${items.length}</span>` : `<span style="font-size:0.65rem;white-space:nowrap;">${secPlaced}/${items.length}</span><div style="width:36px;background:#111;border-radius:3px;height:5px;overflow:hidden;flex-shrink:0;"><div style="background:var(--success);height:100%;width:${secPct}%;transition:width 0.2s;"></div></div>`}</span>
                   ${!secDone ? `<button type="button" class="reset-link" style="margin:0; font-size:0.65rem; color:var(--accent-text); padding:0 6px;" data-mark-section="${secIndices}">Mark all done</button>` : ''}
                 </div>
                 <div class="match-list">${displayItems.map(renderItem).join('')}</div>
               </div>`;
             }).join('');
           } else {
-            innerHtml = `<div class="match-list">${rowPlacements.map(renderItem).join('')}</div>`;
+            const sortedRow = appState.patternSortEasyFirst
+              ? [...rowPlacements].sort((a, b) => a.moveCount - b.moveCount)
+              : rowPlacements;
+            innerHtml = `<div class="match-list">${sortedRow.map(renderItem).join('')}</div>`;
           }
           return `<details class="row-section"${allDone ? '' : ' open'}>
             <summary>${label}<span class="row-progress">${progressLabel}</span></summary>
@@ -4937,8 +4949,11 @@ function renderPlanResult() {
           </details>`;
         }).join('');
       }
-      return `<div class="match-list">${visiblePlacements.map(renderItem).join('')}</div>
-        ${filterActive && visiblePlacements.length === 0 ? '<p class="panel-desc">No targets in that row range.</p>' : ''}`;
+      const flatList = appState.patternSortEasyFirst
+        ? [...visiblePlacements].sort((a, b) => a.moveCount - b.moveCount)
+        : visiblePlacements;
+      return `<div class="match-list">${flatList.map(renderItem).join('')}</div>
+        ${visiblePlacements.length === 0 ? '<p class="panel-desc">No targets match the current filter.</p>' : ''}`;
     })() : '<p class="panel-desc">No placements produced yet.</p>'}
     ${errorBlock}
     ${planState.status !== 'running' ? `
@@ -4979,6 +4994,13 @@ function renderPlanResult() {
     appState.patternPlanRowFilter = null;
     renderPlanResult();
   };
+  const patternSearchInput = document.getElementById('patternSearchInput');
+  if (patternSearchInput) {
+    patternSearchInput.oninput = (e) => { appState.patternSearchFilter = e.target.value; renderPlanResult(); };
+    patternSearchInput.onkeydown = (e) => { e.stopPropagation(); }; // prevent global shortcuts while typing
+  }
+  const clearPatternBtn = document.getElementById('clearPatternSearchBtn');
+  if (clearPatternBtn) clearPatternBtn.onclick = () => { appState.patternSearchFilter = ''; renderPlanResult(); };
   const collapseAllBtn = document.getElementById('collapseAllBtn');
   if (collapseAllBtn) {
     const rowSections = () => el.querySelectorAll('details.row-section');
@@ -5582,6 +5604,11 @@ function createCubeViewer(canvasContainer, startStr, moveString) {
   // move, so the user can see at a glance which face to turn next.
   // Called with the face letter before each animation and with null when
   // the move has started (or when there is no next move).
+  function flip() {
+    cubeletGroup.rotation.y += Math.PI;
+    render();
+  }
+
   let highlightMesh = null;
   function setFaceHighlight(face) {
     if (highlightMesh) { cubeletGroup.remove(highlightMesh); highlightMesh = null; }
@@ -5704,6 +5731,7 @@ function createCubeViewer(canvasContainer, startStr, moveString) {
     get isAnimating() { return animating; },
     moves,
     setFaceHighlight,
+    flip,
     next(callback) {
       if (animating || currentStep >= moves.length) return;
       setFaceHighlight(null);
@@ -5757,6 +5785,7 @@ let viewerLargeText = false;    // persists large-move-text toggle across cube n
 function closeCubeViewer() {
   if (autoMarkPlacedTimer) { clearTimeout(autoMarkPlacedTimer); autoMarkPlacedTimer = null; }
   if (activeViewerAutoplayTimer) { clearTimeout(activeViewerAutoplayTimer); activeViewerAutoplayTimer = null; }
+  document.getElementById('snapshotZoomPopover')?.remove();
   if (activeCubeViewer) { activeCubeViewer.dispose(); activeCubeViewer = null; }
   const overlay = document.getElementById('cubeViewerOverlay');
   if (overlay) overlay.remove();
@@ -5902,17 +5931,22 @@ function openCubeViewer(placementIndex) {
         <button id="cubeViewerLargeTextBtn" style="flex-shrink:0; padding:2px 8px; border-radius:5px; font-size:0.68rem; font-weight:700; cursor:pointer; border:1px solid ${viewerLargeText ? 'var(--accent)' : 'var(--border)'}; background:${viewerLargeText ? 'var(--accent)' : '#2e2e2e'}; color:${viewerLargeText ? '#1a1209' : 'var(--text)'};" title="Toggle large move text">A+</button>
       </div>
       <div class="cube-viewer-moves-strip" id="cubeViewerMovesStrip" tabindex="0" role="group" aria-label="Full move sequence, scrollable"></div>
+      <div style="padding:2px 16px 0;">
+        <input type="range" id="cubeViewerScrubber" min="0" max="0" value="0" style="width:100%; accent-color:var(--accent); cursor:pointer;" aria-label="Jump to move step">
+      </div>
       <div class="cube-viewer-controls">
         <button id="cubeViewerRestartBtn">&#8635; Restart</button>
         <button id="cubeViewerPrevBtn">&larr; Prev</button>
         <button id="cubeViewerPlayBtn" class="play-btn">Play</button>
         <button id="cubeViewerNextBtn">Next &rarr;</button>
       </div>
-      <div style="display:flex; align-items:center; gap:6px; padding:2px 16px 6px; justify-content:center;">
+      <div style="display:flex; align-items:center; gap:6px; padding:2px 16px 6px; justify-content:center; flex-wrap:wrap;">
         <span style="font-size:0.68rem; color:var(--text-dim);">Speed:</span>
         <button data-speed="450" class="viewer-speed-chip" style="padding:2px 10px; border-radius:5px; font-size:0.7rem; cursor:pointer; border:1px solid;">Slow</button>
         <button data-speed="220" class="viewer-speed-chip" style="padding:2px 10px; border-radius:5px; font-size:0.7rem; cursor:pointer; border:1px solid;">Normal</button>
         <button data-speed="80" class="viewer-speed-chip" style="padding:2px 10px; border-radius:5px; font-size:0.7rem; cursor:pointer; border:1px solid;">Fast</button>
+        <span style="color:var(--border);">|</span>
+        <button id="cubeViewerFlipBtn" style="padding:2px 10px; border-radius:5px; font-size:0.7rem; cursor:pointer; border:1px solid var(--border); background:#2e2e2e; color:var(--text);" title="Flip cube to see back (F key)">&#8644; Flip</button>
       </div>
       <div class="cube-viewer-controls" style="padding-top:0;">
         <button id="cubeViewerPrevCubeBtn" ${(navPos < 0 || navPos <= 0) ? 'disabled' : ''}>&larr; Prev cube</button>
@@ -5920,7 +5954,7 @@ function openCubeViewer(placementIndex) {
         <button id="cubeViewerNextCubeBtn" ${(navPos < 0 || navPos >= navigable.length - 1) ? 'disabled' : ''}>Next cube &rarr;</button>
       </div>
       <div style="text-align:center; padding:4px 16px 2px; font-size:0.78rem; color:var(--text-dim);">When done &rarr; show <strong style="color:var(--text);">${FACE_FULL_NAMES[placement.face]}</strong> face${placement.rotation ? `, rotated ${placement.rotation}&deg;` : ''}</div>
-      <div class="cube-viewer-hint">Drag to rotate &middot; &#8592; &#8594; moves &middot; Space play/pause &middot; [ ] prev/next cube</div>
+      <div class="cube-viewer-hint">Drag to rotate &middot; &#8592; &#8594; moves &middot; Space play/pause &middot; [ ] prev/next cube &middot; F flip</div>
     </div>
   `;
   document.body.appendChild(overlay);
@@ -5968,6 +6002,21 @@ function openCubeViewer(placementIndex) {
     }
     updateStepUI();
   };
+  document.getElementById('cubeViewerFlipBtn').onclick = () => {
+    if (activeCubeViewer) activeCubeViewer.flip();
+  };
+  const scrubber = document.getElementById('cubeViewerScrubber');
+  if (scrubber) {
+    scrubber.oninput = (e) => {
+      if (autoMarkPlacedTimer) { clearTimeout(autoMarkPlacedTimer); autoMarkPlacedTimer = null; }
+      if (activeViewerAutoplayTimer) { clearTimeout(activeViewerAutoplayTimer); activeViewerAutoplayTimer = null; document.getElementById('cubeViewerPlayBtn').textContent = 'Play'; }
+      if (activeCubeViewer && !activeCubeViewer.isAnimating) {
+        activeCubeViewer.jumpTo(parseInt(e.target.value), updateStepUI);
+      }
+    };
+    // Prevent space/arrow keys on the slider from triggering viewer shortcuts
+    scrubber.onkeydown = (e) => { e.stopPropagation(); };
+  }
 
   // Keyboard accessibility: Escape closes the dialog, and Tab/Shift+Tab
   // cycle (trap) focus among the dialog's own focusable controls rather
@@ -6025,6 +6074,11 @@ function openCubeViewer(placementIndex) {
       if (navPos < navigable.length - 1) openCubeViewer(navigable[navPos + 1]);
       return;
     }
+    if (e.key === 'f' || e.key === 'F') {
+      e.preventDefault();
+      if (activeCubeViewer) activeCubeViewer.flip();
+      return;
+    }
   };
   document.addEventListener('keydown', cubeViewerKeydownHandler);
   if (dialogEl) dialogEl.focus(); // move focus into the dialog so screen readers announce it and Tab starts inside
@@ -6067,14 +6121,45 @@ function openCubeViewer(placementIndex) {
         if (autoMarkPlacedTimer) { clearTimeout(autoMarkPlacedTimer); autoMarkPlacedTimer = null; }
         const nextMove = v.moves[v.currentStep];
         const moveFontSize = viewerLargeText ? '3rem' : '1.5rem';
-        label.innerHTML = `Turn <strong style="font-size:${moveFontSize}; font-family:'SF Mono',Monaco,monospace;">${nextMove}</strong> next &nbsp;<span style="color:var(--text-dim);">(move ${v.currentStep + 1} of ${v.totalSteps})</span>`;
+        const FACE_WORDS = { U:'Top', D:'Bottom', R:'Right', L:'Left', F:'Front', B:'Back' };
+        const mFace = nextMove[0];
+        const mDir = nextMove.includes('2') ? '180°' : nextMove.includes("'") ? 'counter-clockwise' : 'clockwise';
+        const narration = `${FACE_WORDS[mFace] || mFace} face, ${mDir}`;
+        label.innerHTML = `Turn <strong style="font-size:${moveFontSize}; font-family:'SF Mono',Monaco,monospace;">${nextMove}</strong> next &nbsp;<span style="color:var(--text-dim);">(move ${v.currentStep + 1} of ${v.totalSteps})</span><br><span style="font-size:0.72rem; color:var(--text-dim);">${narration}</span>`;
       }
     }
     if (v.setFaceHighlight) {
       v.setFaceHighlight(v.currentStep < v.totalSteps ? v.moves[v.currentStep][0] : null);
     }
     const snapshots = document.getElementById('cubeViewerSnapshots');
-    if (snapshots) snapshots.innerHTML = renderCubeViewerSnapshots(placement.startStr, v.moves, v.currentStep);
+    if (snapshots) {
+      snapshots.innerHTML = renderCubeViewerSnapshots(placement.startStr, v.moves, v.currentStep);
+      snapshots.querySelectorAll('.cube-snapshot-block').forEach(block => {
+        block.style.cursor = 'pointer';
+        block.title = 'Click to zoom';
+        block.onclick = () => {
+          const existing = document.getElementById('snapshotZoomPopover');
+          if (existing) { existing.remove(); return; }
+          const scale = 2.4;
+          const w = block.offsetWidth;
+          const h = block.offsetHeight;
+          const popover = document.createElement('div');
+          popover.id = 'snapshotZoomPopover';
+          const snapshotRect = snapshots.getBoundingClientRect();
+          let top = snapshotRect.bottom + 8;
+          if (top + h * scale + 24 > window.innerHeight - 10) top = snapshotRect.top - h * scale - 28;
+          let left = snapshotRect.left;
+          if (left + w * scale + 24 > window.innerWidth - 10) left = window.innerWidth - w * scale - 34;
+          popover.style.cssText = `position:fixed; z-index:10001; background:#1a1a1a; border:1px solid var(--border); border-radius:10px; padding:12px; box-shadow:0 8px 32px #000a; width:${w * scale + 24}px; height:${h * scale + 24}px; overflow:hidden; top:${top}px; left:${left}px;`;
+          popover.innerHTML = `<div style="position:absolute; top:12px; left:12px; transform-origin:top left; transform:scale(${scale});">${block.outerHTML}</div>`;
+          document.body.appendChild(popover);
+          setTimeout(() => {
+            const dismiss = (e2) => { if (!popover.contains(e2.target)) { popover.remove(); document.removeEventListener('click', dismiss); } };
+            document.addEventListener('click', dismiss);
+          }, 0);
+        };
+      });
+    }
     const strip = document.getElementById('cubeViewerMovesStrip');
     if (strip) {
       strip.innerHTML = v.moves.map((m, i) => `<span class="cube-viewer-move-chip ${i === v.currentStep ? 'current' : ''} ${i < v.currentStep ? 'done' : ''}">${m}</span>`).join('');
@@ -6091,6 +6176,12 @@ function openCubeViewer(placementIndex) {
     if (prevBtn) prevBtn.disabled = v.currentStep === 0 || v.isAnimating;
     if (nextBtn) nextBtn.disabled = v.currentStep >= v.totalSteps || v.isAnimating;
     if (playBtn) playBtn.disabled = v.totalSteps === 0;
+    const scrubberEl = document.getElementById('cubeViewerScrubber');
+    if (scrubberEl) {
+      scrubberEl.max = v.totalSteps;
+      scrubberEl.value = v.currentStep;
+      scrubberEl.disabled = v.isAnimating || v.totalSteps === 0;
+    }
   }
   updateStepUI();
 
