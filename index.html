@@ -3308,8 +3308,9 @@ let appState = {
   // narrow hundreds of placements down to just the physical section
   // of the mosaic you're currently working through. { from, to } | null.
   patternPlanRowFilter: null,
-  patternSectionWidth: 10,  // cubes per column-section (A, B, C…)
-  patternSectionHeight: 10, // cubes per row-section (1, 2, 3…)
+  patternSectionWidth: 3,        // cubes per column-section (A, B, C…)
+  patternSectionHeight: 4,       // cubes per row-section (1, 2, 3…) for sections 2+
+  patternSectionFirstHeight: 1,  // row height of the bottom section (section 1) if different
   // The current/last plan RUN. Unlike a single one-shot return value,
   // this is a mutable, incrementally-built, PERSISTABLE object: large
   // mosaics (hundreds of cubes) take real time to solve, so the run
@@ -3647,6 +3648,7 @@ function initPlanRun(targetsInput) {
     mosaicWidth: appState.patternMosaicWidth, // captured AT SUBMIT TIME so a reload/resume keeps showing row/col labels and the same grid shape, instead of losing them because the width field itself wasn't separately persisted
     sectionWidth: appState.patternSectionWidth,
     sectionHeight: appState.patternSectionHeight,
+    sectionFirstHeight: appState.patternSectionFirstHeight,
     totalCount: targets.length,
     doneCount: placements.length,
     placements,
@@ -3852,9 +3854,11 @@ Read each grid's colors exactly as shown in the PDF -- don't infer, simplify, or
         <input type="number" min="1" id="mosaicWidthInput" value="${appState.patternMosaicWidth ?? ''}" placeholder="e.g. 30">
       </div>
       <div class="matcher-row">
-        <label for="sectionWidthInput">PDF section size in cubes (for A1/B1/C1&hellip; area labels):</label>
-        <input type="number" min="1" id="sectionWidthInput" value="${appState.patternSectionWidth}" placeholder="10" style="width:60px;"> wide &times;
-        <input type="number" min="1" id="sectionHeightInput" value="${appState.patternSectionHeight}" placeholder="10" style="width:60px;"> tall
+        <label for="sectionWidthInput">PDF section size (for A1/B1/C1&hellip; labels):</label>
+        <input type="number" min="1" id="sectionWidthInput" value="${appState.patternSectionWidth}" placeholder="3" style="width:52px;"> wide &times;
+        <input type="number" min="1" id="sectionHeightInput" value="${appState.patternSectionHeight}" placeholder="4" style="width:52px;"> rows;
+        section&nbsp;1 height:
+        <input type="number" min="1" id="sectionFirstHeightInput" value="${appState.patternSectionFirstHeight}" placeholder="1" style="width:52px;"> row${appState.patternSectionFirstHeight === 1 ? '' : 's'}
       </div>
       <p class="panel-desc" style="margin-top:6px;">Line 1 of your pasted list is treated as row 1, column 1 (bottom-left), reading left-to-right then up &mdash; matching the PDF's ordering. The preview grid below shows the mosaic with the bottom row at the bottom, matching your source image.</p>
       <div id="mosaicPreviewArea"></div>
@@ -4322,6 +4326,10 @@ Read each grid's colors exactly as shown in the PDF -- don't infer, simplify, or
     const v = parseInt(e.target.value, 10);
     if (v > 0) { appState.patternSectionHeight = v; renderPlanResult(); }
   };
+  document.getElementById('sectionFirstHeightInput').oninput = (e) => {
+    const v = parseInt(e.target.value, 10);
+    if (v > 0) { appState.patternSectionFirstHeight = v; renderPlanResult(); }
+  };
   document.getElementById('submitPlanBtn').onclick = handleSubmitPlan;
 
   renderMosaicPreview();
@@ -4453,10 +4461,14 @@ function updateSubmitButton() {
 // Returns the PDF area label (e.g. "A1", "B3") for a grid position.
 // Letters advance left-to-right (A=first sectionW columns, B=next, …);
 // numbers advance bottom-to-top (1=first sectionH rows, 2=next, …).
-function sectionLabelForPosition(row, col, sectionW, sectionH) {
+// firstH = height of section 1 (bottom band); sectionH = height of all higher sections.
+// When firstH === sectionH the grid is uniform. When they differ (e.g. firstH=1, sectionH=4)
+// the bottom strip gets its own band and higher sections count from band 2 upward.
+function sectionLabelForPosition(row, col, sectionW, sectionH, firstH) {
   if (!sectionW || !sectionH || !row || !col) return null;
   const colGroup = Math.floor((col - 1) / sectionW);
-  const rowGroup = Math.floor((row - 1) / sectionH) + 1;
+  const fH = (firstH && firstH !== sectionH) ? firstH : sectionH;
+  const rowGroup = row <= fH ? 1 : Math.floor((row - fH - 1) / sectionH) + 2;
   return String.fromCharCode(65 + colGroup) + rowGroup;
 }
 
@@ -4801,8 +4813,9 @@ function renderPlanResult() {
           byRow.get(rowNum).push(p);
         });
         if (byRow.size === 0) return '<p class="panel-desc">No targets in that row range.</p>';
-        const sW = planState.sectionWidth || appState.patternSectionWidth;
-        const sH = planState.sectionHeight || appState.patternSectionHeight;
+        const sW  = planState.sectionWidth       || appState.patternSectionWidth;
+        const sH  = planState.sectionHeight      || appState.patternSectionHeight;
+        const sFH = planState.sectionFirstHeight ?? appState.patternSectionFirstHeight;
         return [...byRow.entries()].map(([rowNum, rowPlacements]) => {
           const placedInRow = rowPlacements.filter(p => p.placed).length;
           const allDone = placedInRow === rowPlacements.length;
@@ -4816,7 +4829,7 @@ function renderPlanResult() {
             const bySection = new Map();
             rowPlacements.forEach(p => {
               const pos = gridPositionForLine(p.targetLineNum, width);
-              const sec = pos ? sectionLabelForPosition(pos.row, pos.col, sW, sH) : '?';
+              const sec = pos ? sectionLabelForPosition(pos.row, pos.col, sW, sH, sFH) : '?';
               if (!bySection.has(sec)) bySection.set(sec, []);
               bySection.get(sec).push(p);
             });
