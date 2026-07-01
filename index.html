@@ -4173,7 +4173,26 @@ Read each grid's colors exactly as shown in the PDF -- don't infer, simplify, or
           const ctx = offscreenCanvas.getContext('2d');
           ctx.fillStyle = '#ffffff';
           ctx.fillRect(0, 0, viewport.width, viewport.height);
-          await page.render({ canvasContext: ctx, viewport }).promise;
+          // Run render and text extraction in parallel — independent operations.
+          const [, pageTC] = await Promise.all([
+            page.render({ canvasContext: ctx, viewport }).promise,
+            page.getTextContent().catch(() => null),
+          ]);
+
+          // Extract section label (e.g. "A1") from the page text.
+          // Try exact standalone items first (most reliable), then a word-boundary search.
+          let sectionLabel = null;
+          if (pageTC) {
+            for (const item of pageTC.items) {
+              const s = (item.str || '').trim();
+              if (/^[A-Z]\d{1,2}$/.test(s)) { sectionLabel = { letter: s[0], number: parseInt(s.slice(1), 10) }; break; }
+            }
+            if (!sectionLabel) {
+              const joined = pageTC.items.map(i => i.str).join(' ');
+              const m = joined.match(/\b([A-Z])(\d{1,2})\b/);
+              if (m) sectionLabel = { letter: m[1], number: parseInt(m[2], 10) };
+            }
+          }
 
           // Detect cubesTall: check grid aspect ratio vs known cell structure
           // A 3-wide × 1-tall grid has aspect ≈ 3:1; 3-wide × 4-tall ≈ 3:4
@@ -4225,7 +4244,7 @@ Read each grid's colors exactly as shown in the PDF -- don't infer, simplify, or
 
           const pageCubes = extractPageCubes(offscreenCanvas, cubesPerRowPage, cubesTall);
           if (pageCubes) {
-            pageResults.push({ cubes: pageCubes, cubesTall });
+            pageResults.push({ cubes: pageCubes, cubesTall, sectionLabel });
           }
 
           const pct = Math.round(((pageNum - 1) / (totalPages - 1)) * 100);
@@ -4239,6 +4258,30 @@ Read each grid's colors exactly as shown in the PDF -- don't infer, simplify, or
         showStatus('No cube patterns found. Is this a Ruwix mosaic PDF?', 'error');
         hideProgress();
         return;
+      }
+
+      // Derive section layout from the labels collected per page.
+      // Pages with section number 1 tell us the first-band height; pages with number 2+
+      // tell us the regular-band height. If all numbers are the same the grid is uniform.
+      let sectionDetected = false;
+      const labeledPages = pageResults.filter(r => r.sectionLabel);
+      if (labeledPages.length >= 2) {
+        const band1 = labeledPages.filter(r => r.sectionLabel.number === 1);
+        const band2 = labeledPages.filter(r => r.sectionLabel.number !== 1);
+        const fH = band1.length ? band1[0].cubesTall : null;
+        const rH = band2.length ? band2[0].cubesTall : fH;
+        if (fH && rH) {
+          appState.patternSectionWidth = cubesPerRowPage;
+          appState.patternSectionFirstHeight = fH;
+          appState.patternSectionHeight = rH;
+          const swEl = document.getElementById('sectionWidthInput');
+          const shEl = document.getElementById('sectionHeightInput');
+          const sfhEl = document.getElementById('sectionFirstHeightInput');
+          if (swEl) swEl.value = cubesPerRowPage;
+          if (shEl) shEl.value = rH;
+          if (sfhEl) sfhEl.value = fH;
+          sectionDetected = true;
+        }
       }
 
       // Ruwix PDFs are row-major, left-to-right, bottom-to-top.
@@ -4286,11 +4329,14 @@ Read each grid's colors exactly as shown in the PDF -- don't infer, simplify, or
       }
 
       hideProgress();
-      const msg = detectedTotal
-        ? `Imported ${allCubes.length} cubes (PDF says ${detectedTotal}${allCubes.length !== detectedTotal ? ' — count mismatch, check results' : ' ✓'})`
-        : `Imported ${allCubes.length} cubes`;
+      const countPart = detectedTotal
+        ? `${allCubes.length} cubes (PDF says ${detectedTotal}${allCubes.length !== detectedTotal ? ' — count mismatch, check results' : ' ✓'})`
+        : `${allCubes.length} cubes`;
+      const sectionPart = sectionDetected
+        ? ` · Section layout auto-detected: ${appState.patternSectionWidth} wide, ${appState.patternSectionHeight} rows (section 1: ${appState.patternSectionFirstHeight} row${appState.patternSectionFirstHeight === 1 ? '' : 's'})`
+        : '';
       const isCountOk = !detectedTotal || allCubes.length === detectedTotal;
-      showStatus(msg, isCountOk ? 'success' : 'error');
+      showStatus(`Imported ${countPart}${sectionPart}`, isCountOk ? 'success' : 'error');
 
       updateSubmitButton();
       debouncedRenderMosaicPreview();
