@@ -4844,7 +4844,23 @@ function renderPlanResult() {
       <div class="match-stat"><div class="num">${totalMoves}</div><div class="lbl">total moves</div></div>
       ${planState.status !== 'running' ? `<div class="match-stat free"><div class="num">${placedCount}/${planState.placements.length}</div><div class="lbl">physically placed</div></div>` : ''}
     </div>
+    ${planState.status === 'done' ? (() => {
+      const total = planState.placements.length;
+      const pct = total === 0 ? 0 : Math.round(100 * placedCount / total);
+      return `<div style="margin:-4px 0 16px;">
+        <div style="display:flex; justify-content:space-between; font-size:0.72rem; color:var(--text-dim); margin-bottom:5px;">
+          <span>${placedCount} of ${total} cubes placed</span>
+          <span>${pct}%</span>
+        </div>
+        <div style="background:#111; border-radius:6px; height:8px; overflow:hidden;" role="progressbar" aria-valuenow="${placedCount}" aria-valuemin="0" aria-valuemax="${total}" aria-label="Mosaic placement progress">
+          <div style="background:var(--success); height:100%; width:${pct}%; transition:width 0.2s;"></div>
+        </div>
+      </div>`;
+    })() : ''}
+    ${(planState.status === 'done' && placedCount < planState.placements.length) ? `<div style="text-align:right; margin:-8px 0 10px;"><button type="button" class="reset-link" id="jumpNextUnplacedBtn" style="margin:0; font-size:0.78rem;">&#8595; Next unplaced</button></div>` : ''}
+    ${lastSectionMarkUndo ? `<div style="display:flex; align-items:center; justify-content:space-between; padding:6px 10px; background:#1e2a1e; border:1px solid #2d4a2d; border-radius:8px; margin-bottom:8px; font-size:0.8rem;"><span style="color:var(--success);">&#10003; Section marked done (${lastSectionMarkUndo.length} cubes)</span><button type="button" id="undoMarkSectionBtn" class="reset-link" style="margin:0; color:var(--accent-text);">Undo</button></div>` : ''}
     ${rowFilterBlock}
+    ${(width && planState.status !== 'running') ? `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; font-size:0.75rem;"><button type="button" class="reset-link" id="sortEasyFirstBtn" style="margin:0;">${appState.patternSortEasyFirst ? 'Sorted: easy first &#10005;' : 'Sort: easy first'}</button><button type="button" class="reset-link" id="collapseAllBtn" style="margin:0;"></button></div>` : ''}
     ${planState.placements.length > 0 ? (() => {
       const renderItem = (p) => {
         const i = planState.placements.indexOf(p);
@@ -4861,7 +4877,7 @@ function renderPlanResult() {
               : ` &mdash; turns: <span style="font-family:'SF Mono',Monaco,monospace;">${p.moves}</span>, then show the <strong>${FACE_FULL_NAMES[p.face]}</strong> face.`
             }
           </span>
-          ${(planState.status !== 'running' && p.type === 'solve') ? `<button class="cube-viewer-trigger" style="border:none; border-radius:6px; padding:4px 8px; font-size:0.7rem; cursor:pointer; flex-shrink:0;" id="showMeBtn${i}" aria-label="Show 3D turn-by-turn animation for target ${posLabel}, pattern ${p.mosaicPattern}">▶ Show me</button>` : ''}
+          ${planState.status !== 'running' ? `<button class="cube-viewer-trigger" style="border:none; border-radius:6px; padding:4px 8px; font-size:0.7rem; cursor:pointer; flex-shrink:0;" id="showMeBtn${i}" aria-label="Show 3D viewer for target ${posLabel}, pattern ${p.mosaicPattern}">▶ Show me</button>` : ''}
           ${planState.status !== 'running' ? `<button type="button" class="reset-link" style="margin:0; font-size:0.7rem; flex-shrink:0;" id="editRowBtn${i}" aria-label="Fix target ${posLabel}, pattern ${p.mosaicPattern}">fix</button>` : ''}
         </div>
         <div id="editRowArea${i}" aria-live="polite"></div>`;
@@ -4900,11 +4916,16 @@ function renderPlanResult() {
             innerHtml = [...bySection.entries()].map(([sec, items]) => {
               const secPlaced = items.filter(p => p.placed).length;
               const secDone = secPlaced === items.length;
+              const secIndices = items.map(p => planState.placements.indexOf(p)).join(',');
+              const displayItems = appState.patternSortEasyFirst
+                ? [...items].sort((a, b) => a.moveCount - b.moveCount)
+                : items;
               return `<div class="section-group">
                 <div class="section-group-header${secDone ? ' section-done' : ''}">
                   Section ${sec}<span class="section-group-progress">${secDone ? `✓ ${items.length}` : `${secPlaced}/${items.length} placed`}</span>
+                  ${!secDone ? `<button type="button" class="reset-link" style="margin:0; font-size:0.65rem; color:var(--accent-text); padding:0 6px;" data-mark-section="${secIndices}">Mark all done</button>` : ''}
                 </div>
-                <div class="match-list">${items.map(renderItem).join('')}</div>
+                <div class="match-list">${displayItems.map(renderItem).join('')}</div>
               </div>`;
             }).join('');
           } else {
@@ -4921,25 +4942,26 @@ function renderPlanResult() {
     })() : '<p class="panel-desc">No placements produced yet.</p>'}
     ${errorBlock}
     ${planState.status !== 'running' ? `
-    <div style="display:flex; gap:8px; margin-top:12px;">
-      <button class="secondary-btn" id="copyPlanBtn" style="flex:1; margin:0; text-align:center;">Copy as text</button>
-      <button class="secondary-btn" id="downloadPlanBtn" style="flex:1; margin:0; text-align:center;">Download .txt</button>
-      <button class="secondary-btn" id="printPlanBtn" style="flex:1; margin:0; text-align:center;">Print</button>
+    <div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap;">
+      <button class="secondary-btn" id="copyPlanBtn" style="flex:1; margin:0; text-align:center;">${filterActive ? 'Copy filtered' : 'Copy as text'}</button>
+      <button class="secondary-btn" id="downloadPlanBtn" style="flex:1; margin:0; text-align:center;">${filterActive ? 'Download filtered .txt' : 'Download .txt'}</button>
+      <button class="secondary-btn" id="printPlanBtn" style="flex:1; margin:0; text-align:center;">${filterActive ? 'Print filtered' : 'Print'}</button>
     </div>
     ` : ''}
   `;
 
   const cancelBtn = document.getElementById('cancelPlanBtn');
   if (cancelBtn) cancelBtn.onclick = handleCancelPlan;
+  const exportList = filterActive ? visiblePlacements : null;
   const copyBtn = document.getElementById('copyPlanBtn');
   if (copyBtn) copyBtn.onclick = () => {
-    navigator.clipboard.writeText(exportPlanText(planState)).catch(() => {});
+    navigator.clipboard.writeText(exportPlanText(planState, exportList)).catch(() => {});
     copyBtn.textContent = 'Copied!';
   };
   const downloadBtn = document.getElementById('downloadPlanBtn');
-  if (downloadBtn) downloadBtn.onclick = () => handleDownloadPlan(planState);
+  if (downloadBtn) downloadBtn.onclick = () => handleDownloadPlan(planState, exportList);
   const printBtn = document.getElementById('printPlanBtn');
-  if (printBtn) printBtn.onclick = () => handlePrintPlan(planState);
+  if (printBtn) printBtn.onclick = () => handlePrintPlan(planState, exportList);
   const fromInput = document.getElementById('rowFilterFrom');
   const toInput = document.getElementById('rowFilterTo');
   if (fromInput) fromInput.oninput = (e) => {
@@ -4957,10 +4979,57 @@ function renderPlanResult() {
     appState.patternPlanRowFilter = null;
     renderPlanResult();
   };
+  const collapseAllBtn = document.getElementById('collapseAllBtn');
+  if (collapseAllBtn) {
+    const rowSections = () => el.querySelectorAll('details.row-section');
+    const syncLabel = () => { collapseAllBtn.textContent = [...rowSections()].some(s => s.open) ? 'Collapse all' : 'Expand all'; };
+    syncLabel();
+    collapseAllBtn.onclick = () => {
+      const secs = rowSections();
+      const anyOpen = [...secs].some(s => s.open);
+      secs.forEach(s => { s.open = !anyOpen; });
+      syncLabel();
+    };
+  }
+  el.querySelectorAll('[data-mark-section]').forEach(btn => {
+    btn.onclick = () => {
+      const indices = btn.dataset.markSection.split(',').map(Number);
+      lastSectionMarkUndo = indices.map(i => ({ i, placed: planState.placements[i].placed }));
+      indices.forEach(i => { planState.placements[i].placed = true; });
+      if (planState.status === 'done') savePlanRunProgress(planState);
+      renderPlanResult();
+    };
+  });
+  const jumpNextBtn = document.getElementById('jumpNextUnplacedBtn');
+  if (jumpNextBtn) jumpNextBtn.onclick = () => {
+    const nextIdx = planState.placements.findIndex(p => !p.placed);
+    if (nextIdx < 0) return;
+    const checkbox = document.getElementById(`placedCheck${nextIdx}`);
+    if (checkbox) {
+      let node = checkbox.parentElement;
+      while (node && node !== el) { if (node.tagName === 'DETAILS') node.open = true; node = node.parentElement; }
+      const item = checkbox.closest('.match-item') || checkbox;
+      item.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      item.style.outline = '2px solid var(--accent)';
+      setTimeout(() => { item.style.outline = ''; }, 1500);
+    }
+  };
+  const undoMarkBtn = document.getElementById('undoMarkSectionBtn');
+  if (undoMarkBtn) undoMarkBtn.onclick = () => {
+    if (lastSectionMarkUndo) {
+      lastSectionMarkUndo.forEach(({i, placed}) => { planState.placements[i].placed = placed; });
+      lastSectionMarkUndo = null;
+      if (planState.status === 'done') savePlanRunProgress(planState);
+      renderPlanResult();
+    }
+  };
+  const sortBtn = document.getElementById('sortEasyFirstBtn');
+  if (sortBtn) sortBtn.onclick = () => { appState.patternSortEasyFirst = !appState.patternSortEasyFirst; renderPlanResult(); };
   visiblePlacements.forEach((p) => {
     const i = planState.placements.indexOf(p);
     const checkbox = document.getElementById(`placedCheck${i}`);
     if (checkbox) checkbox.onchange = (e) => {
+      lastSectionMarkUndo = null;
       planState.placements[i].placed = e.target.checked;
       if (planState.status === 'done') savePlanRunProgress(planState);
       renderPlanResult();
@@ -5034,9 +5103,9 @@ function renderEditRow(i) {
   };
 }
 
-function exportPlanText(planState) {
+function exportPlanText(planState, placements) {
   const width = planState.mosaicWidth;
-  return planState.placements.map(p => {
+  return (placements ?? planState.placements).map(p => {
     const pos = gridPositionForLine(p.targetLineNum, width);
     const posLabel = pos ? `row ${pos.row} col ${pos.col}` : `line ${p.targetLineNum}`;
     const prefix = p.placed ? '[DONE] ' : '';
@@ -5053,8 +5122,8 @@ function exportPlanText(planState) {
 // warning, while a downloaded file stays put until you delete it, and
 // can be kept open on a second device/tab while you work through cubes
 // on the first.
-function handleDownloadPlan(planState) {
-  const text = exportPlanText(planState);
+function handleDownloadPlan(planState, placements) {
+  const text = exportPlanText(planState, placements);
   if (!text.trim()) return;
   const blob = new Blob([text], { type: 'text/plain' });
   const url = URL.createObjectURL(blob);
@@ -5072,9 +5141,10 @@ function handleDownloadPlan(planState) {
 // interactive buttons aren't meant for paper, so this is a separate,
 // minimal rendering: plain black-on-white text, one row per cube,
 // readable at a glance while your hands are full of an actual cube.
-function buildPrintablePlanHtml(planState) {
+function buildPrintablePlanHtml(planState, placements) {
   const width = planState.mosaicWidth;
-  const rows = planState.placements.map(p => {
+  const list = placements ?? planState.placements;
+  const rows = list.map(p => {
     const pos = gridPositionForLine(p.targetLineNum, width);
     const posLabel = pos ? `Row ${pos.row}, Col ${pos.col}` : `Line ${p.targetLineNum}`;
     const instruction = p.type === 'free'
@@ -5101,7 +5171,7 @@ function buildPrintablePlanHtml(planState) {
 </style></head>
 <body>
   <h1>Mosaic plan</h1>
-  <div class="meta">${planState.placements.length} cubes &middot; ${planState.placements.filter(p=>p.type==='free').length} free reuses &middot; ${planState.placements.filter(p=>p.type==='solve').length} need turns &middot; generated ${new Date().toLocaleString()}</div>
+  <div class="meta">${list.length} cubes${list.length !== planState.placements.length ? ` (filtered from ${planState.placements.length})` : ''} &middot; ${list.filter(p=>p.type==='free').length} free reuses &middot; ${list.filter(p=>p.type==='solve').length} need turns &middot; generated ${new Date().toLocaleString()}</div>
   <table>
     <thead><tr><th scope="col">Done</th><th scope="col">Position</th><th scope="col">Pattern</th><th scope="col">Source cube</th><th scope="col">Instructions</th></tr></thead>
     <tbody>${rows}</tbody>
@@ -5112,8 +5182,8 @@ function buildPrintablePlanHtml(planState) {
 // Opens the print-friendly version in a new tab and triggers the
 // browser's native print dialog. Falls back to a plain download of
 // the HTML if the popup is blocked, so it's never a dead end.
-function handlePrintPlan(planState) {
-  const html = buildPrintablePlanHtml(planState);
+function handlePrintPlan(planState, placements) {
+  const html = buildPrintablePlanHtml(planState, placements);
   const printWindow = window.open('', '_blank');
   if (!printWindow) {
     const blob = new Blob([html], { type: 'text/html' });
@@ -5507,6 +5577,29 @@ function createCubeViewer(canvasContainer, startStr, moveString) {
   rebuildAllMeshes();
 
   function render() { renderer.render(scene, camera); }
+
+  // Overlays a semi-transparent white plane on the face that's about to
+  // move, so the user can see at a glance which face to turn next.
+  // Called with the face letter before each animation and with null when
+  // the move has started (or when there is no next move).
+  let highlightMesh = null;
+  function setFaceHighlight(face) {
+    if (highlightMesh) { cubeletGroup.remove(highlightMesh); highlightMesh = null; }
+    if (!face) { render(); return; }
+    const geo = new THREE.PlaneGeometry(3.1, 3.1);
+    const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.22, depthTest: false });
+    highlightMesh = new THREE.Mesh(geo, mat);
+    const d = 1.56;
+    if      (face === 'R') { highlightMesh.position.set( d, 0, 0); highlightMesh.rotation.y =  Math.PI / 2; }
+    else if (face === 'L') { highlightMesh.position.set(-d, 0, 0); highlightMesh.rotation.y = -Math.PI / 2; }
+    else if (face === 'U') { highlightMesh.position.set( 0, d, 0); highlightMesh.rotation.x = -Math.PI / 2; }
+    else if (face === 'D') { highlightMesh.position.set( 0,-d, 0); highlightMesh.rotation.x =  Math.PI / 2; }
+    else if (face === 'F') { highlightMesh.position.set( 0, 0, d); }
+    else if (face === 'B') { highlightMesh.position.set( 0, 0,-d); highlightMesh.rotation.y = Math.PI; }
+    cubeletGroup.add(highlightMesh);
+    render();
+  }
+
   render();
 
   // --- orbit-style drag rotation (simple, no external controls lib) ---
@@ -5610,8 +5703,10 @@ function createCubeViewer(canvasContainer, startStr, moveString) {
     get totalSteps() { return moves.length; },
     get isAnimating() { return animating; },
     moves,
+    setFaceHighlight,
     next(callback) {
       if (animating || currentStep >= moves.length) return;
+      setFaceHighlight(null);
       animating = true;
       playMoveForward(currentStep, () => {
         currentStep++;
@@ -5625,6 +5720,7 @@ function createCubeViewer(canvasContainer, startStr, moveString) {
     // stepping back -- you're reviewing a move you already saw).
     jumpTo(stepIndex, callback) {
       if (animating) return;
+      setFaceHighlight(null);
       const clamped = Math.max(0, Math.min(moves.length, stepIndex));
       cubelets = cube3dBuildModel(startStr);
       for (let i = 0; i < clamped; i++) {
@@ -5653,8 +5749,13 @@ let activeCubeViewer = null;
 let activeViewerAutoplayTimer = null;
 let cubeViewerTriggerEl = null; // element to restore focus to when the modal closes
 let cubeViewerKeydownHandler = null; // bound per-open so it can be removed again on close
+let viewerPlaySpeed = 220; // ms per move during autoplay; updated by the speed chips in the modal
+let lastSectionMarkUndo = null; // one-shot undo buffer for "Mark all done"; cleared on any other edit
+let autoMarkPlacedTimer = null; // timer that auto-marks placed after the last move completes
+let viewerLargeText = false;    // persists large-move-text toggle across cube navigations
 
 function closeCubeViewer() {
+  if (autoMarkPlacedTimer) { clearTimeout(autoMarkPlacedTimer); autoMarkPlacedTimer = null; }
   if (activeViewerAutoplayTimer) { clearTimeout(activeViewerAutoplayTimer); activeViewerAutoplayTimer = null; }
   if (activeCubeViewer) { activeCubeViewer.dispose(); activeCubeViewer = null; }
   const overlay = document.getElementById('cubeViewerOverlay');
@@ -5777,7 +5878,7 @@ function openCubeViewer(placementIndex) {
         <button class="cube-viewer-close" id="cubeViewerCloseBtn" aria-label="Close 3D viewer">&times;</button>
       </div>
       ${minimapHtml}
-      <div style="padding:0 16px 10px;">
+      ${navPos >= 0 ? `<div style="padding:0 16px 10px;">
         <div style="display:flex; justify-content:space-between; font-size:0.72rem; color:var(--text-dim); margin-bottom:4px;">
           <span>Cube ${navPos + 1} of ${navigable.length} needing turns</span>
           <span>${placedSoFar} marked placed so far</span>
@@ -5785,7 +5886,7 @@ function openCubeViewer(placementIndex) {
         <div style="background:#111; border-radius:6px; height:6px; overflow:hidden;">
           <div style="background:var(--accent); height:100%; width:${(100 * (navPos + 1) / Math.max(1, navigable.length)).toFixed(1)}%;"></div>
         </div>
-      </div>
+      </div>` : `<div style="padding:2px 16px 10px; font-size:0.72rem; color:var(--text-dim);">FREE match &mdash; no moves needed. Show the correct face directly.</div>`}
       <div class="cube-viewer-main-row">
         <div class="cube-orient-wrap">
           ${orientLabel('top', 'U')}
@@ -5796,31 +5897,76 @@ function openCubeViewer(placementIndex) {
         </div>
         <div id="cubeViewerSnapshots"></div>
       </div>
-      <div class="cube-viewer-step-label" id="cubeViewerStepLabel"></div>
+      <div style="display:flex; align-items:center; gap:8px; padding:10px 16px 4px;">
+        <div class="cube-viewer-step-label" id="cubeViewerStepLabel" style="flex:1; padding:0;"></div>
+        <button id="cubeViewerLargeTextBtn" style="flex-shrink:0; padding:2px 8px; border-radius:5px; font-size:0.68rem; font-weight:700; cursor:pointer; border:1px solid ${viewerLargeText ? 'var(--accent)' : 'var(--border)'}; background:${viewerLargeText ? 'var(--accent)' : '#2e2e2e'}; color:${viewerLargeText ? '#1a1209' : 'var(--text)'};" title="Toggle large move text">A+</button>
+      </div>
       <div class="cube-viewer-moves-strip" id="cubeViewerMovesStrip" tabindex="0" role="group" aria-label="Full move sequence, scrollable"></div>
       <div class="cube-viewer-controls">
+        <button id="cubeViewerRestartBtn">&#8635; Restart</button>
         <button id="cubeViewerPrevBtn">&larr; Prev</button>
         <button id="cubeViewerPlayBtn" class="play-btn">Play</button>
         <button id="cubeViewerNextBtn">Next &rarr;</button>
       </div>
-      <div class="cube-viewer-controls" style="padding-top:0;">
-        <button id="cubeViewerPrevCubeBtn" ${navPos <= 0 ? 'disabled' : ''}>&larr; Prev cube</button>
-        <button id="cubeViewerMarkPlacedBtn">${placement.placed ? '✓ Placed' : 'Mark placed'}</button>
-        <button id="cubeViewerNextCubeBtn" ${navPos >= navigable.length - 1 ? 'disabled' : ''}>Next cube &rarr;</button>
+      <div style="display:flex; align-items:center; gap:6px; padding:2px 16px 6px; justify-content:center;">
+        <span style="font-size:0.68rem; color:var(--text-dim);">Speed:</span>
+        <button data-speed="450" class="viewer-speed-chip" style="padding:2px 10px; border-radius:5px; font-size:0.7rem; cursor:pointer; border:1px solid;">Slow</button>
+        <button data-speed="220" class="viewer-speed-chip" style="padding:2px 10px; border-radius:5px; font-size:0.7rem; cursor:pointer; border:1px solid;">Normal</button>
+        <button data-speed="80" class="viewer-speed-chip" style="padding:2px 10px; border-radius:5px; font-size:0.7rem; cursor:pointer; border:1px solid;">Fast</button>
       </div>
-      <div class="cube-viewer-hint">Drag the cube to rotate your view.</div>
+      <div class="cube-viewer-controls" style="padding-top:0;">
+        <button id="cubeViewerPrevCubeBtn" ${(navPos < 0 || navPos <= 0) ? 'disabled' : ''}>&larr; Prev cube</button>
+        <button id="cubeViewerMarkPlacedBtn">${placement.placed ? '✓ Placed' : 'Mark placed'}</button>
+        <button id="cubeViewerNextCubeBtn" ${(navPos < 0 || navPos >= navigable.length - 1) ? 'disabled' : ''}>Next cube &rarr;</button>
+      </div>
+      <div style="text-align:center; padding:4px 16px 2px; font-size:0.78rem; color:var(--text-dim);">When done &rarr; show <strong style="color:var(--text);">${FACE_FULL_NAMES[placement.face]}</strong> face${placement.rotation ? `, rotated ${placement.rotation}&deg;` : ''}</div>
+      <div class="cube-viewer-hint">Drag to rotate &middot; &#8592; &#8594; moves &middot; Space play/pause &middot; [ ] prev/next cube</div>
     </div>
   `;
   document.body.appendChild(overlay);
   overlay.onclick = (e) => { if (e.target === overlay) closeCubeViewer(); };
   document.getElementById('cubeViewerCloseBtn').onclick = closeCubeViewer;
+  document.getElementById('cubeViewerRestartBtn').onclick = () => {
+    if (autoMarkPlacedTimer) { clearTimeout(autoMarkPlacedTimer); autoMarkPlacedTimer = null; }
+    if (activeViewerAutoplayTimer) { clearTimeout(activeViewerAutoplayTimer); activeViewerAutoplayTimer = null; document.getElementById('cubeViewerPlayBtn').textContent = 'Play'; }
+    activeCubeViewer.jumpTo(0, updateStepUI);
+  };
   document.getElementById('cubeViewerPrevCubeBtn').onclick = () => { if (navPos > 0) openCubeViewer(navigable[navPos - 1]); };
   document.getElementById('cubeViewerNextCubeBtn').onclick = () => { if (navPos < navigable.length - 1) openCubeViewer(navigable[navPos + 1]); };
   document.getElementById('cubeViewerMarkPlacedBtn').onclick = () => {
-    placement.placed = !placement.placed;
+    if (autoMarkPlacedTimer) { clearTimeout(autoMarkPlacedTimer); autoMarkPlacedTimer = null; }
+    const wasPlaced = placement.placed;
+    placement.placed = !wasPlaced;
     if (planState.status === 'done') savePlanRunProgress(planState);
     renderPlanResult();
-    openCubeViewer(placementIndex); // re-render the modal in place to reflect the new placed state/progress
+    if (!wasPlaced && activeCubeViewer && activeCubeViewer.currentStep >= activeCubeViewer.totalSteps) {
+      const nextUnplaced = navigable.slice(navPos + 1).find(i => !planState.placements[i].placed);
+      if (nextUnplaced !== undefined) { openCubeViewer(nextUnplaced); return; }
+    }
+    openCubeViewer(placementIndex);
+  };
+
+  function applySpeedBtnStyles() {
+    overlay.querySelectorAll('.viewer-speed-chip').forEach(btn => {
+      const active = parseInt(btn.dataset.speed) === viewerPlaySpeed;
+      btn.style.background = active ? 'var(--accent)' : '#2e2e2e';
+      btn.style.color = active ? '#1a1209' : 'var(--text)';
+      btn.style.borderColor = active ? 'var(--accent)' : 'var(--border)';
+    });
+  }
+  applySpeedBtnStyles();
+  overlay.querySelectorAll('.viewer-speed-chip').forEach(btn => {
+    btn.onclick = () => { viewerPlaySpeed = parseInt(btn.dataset.speed); applySpeedBtnStyles(); };
+  });
+  document.getElementById('cubeViewerLargeTextBtn').onclick = () => {
+    viewerLargeText = !viewerLargeText;
+    const btn = document.getElementById('cubeViewerLargeTextBtn');
+    if (btn) {
+      btn.style.background = viewerLargeText ? 'var(--accent)' : '#2e2e2e';
+      btn.style.color = viewerLargeText ? '#1a1209' : 'var(--text)';
+      btn.style.borderColor = viewerLargeText ? 'var(--accent)' : 'var(--border)';
+    }
+    updateStepUI();
   };
 
   // Keyboard accessibility: Escape closes the dialog, and Tab/Shift+Tab
@@ -5847,6 +5993,38 @@ function openCubeViewer(placementIndex) {
         first.focus();
       }
     }
+    if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      if (activeCubeViewer && !activeCubeViewer.isAnimating && activeCubeViewer.currentStep < activeCubeViewer.totalSteps) {
+        if (activeViewerAutoplayTimer) { clearTimeout(activeViewerAutoplayTimer); activeViewerAutoplayTimer = null; const pb = document.getElementById('cubeViewerPlayBtn'); if (pb) pb.textContent = 'Play'; }
+        activeCubeViewer.next(updateStepUI);
+      }
+      return;
+    }
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      if (activeCubeViewer && !activeCubeViewer.isAnimating && activeCubeViewer.currentStep > 0) {
+        if (autoMarkPlacedTimer) { clearTimeout(autoMarkPlacedTimer); autoMarkPlacedTimer = null; }
+        if (activeViewerAutoplayTimer) { clearTimeout(activeViewerAutoplayTimer); activeViewerAutoplayTimer = null; const pb = document.getElementById('cubeViewerPlayBtn'); if (pb) pb.textContent = 'Play'; }
+        activeCubeViewer.jumpTo(activeCubeViewer.currentStep - 1, updateStepUI);
+      }
+      return;
+    }
+    if (e.key === ' ') {
+      e.preventDefault();
+      document.getElementById('cubeViewerPlayBtn')?.click();
+      return;
+    }
+    if (e.key === '[') {
+      e.preventDefault();
+      if (navPos > 0) openCubeViewer(navigable[navPos - 1]);
+      return;
+    }
+    if (e.key === ']') {
+      e.preventDefault();
+      if (navPos < navigable.length - 1) openCubeViewer(navigable[navPos + 1]);
+      return;
+    }
   };
   document.addEventListener('keydown', cubeViewerKeydownHandler);
   if (dialogEl) dialogEl.focus(); // move focus into the dialog so screen readers announce it and Tab starts inside
@@ -5865,13 +6043,35 @@ function openCubeViewer(placementIndex) {
     const label = document.getElementById('cubeViewerStepLabel');
     if (label) {
       if (v.totalSteps === 0) {
+        if (autoMarkPlacedTimer) { clearTimeout(autoMarkPlacedTimer); autoMarkPlacedTimer = null; }
         label.innerHTML = 'This cube is already correct &mdash; no moves to play.';
       } else if (v.currentStep >= v.totalSteps) {
-        label.innerHTML = `<strong style="color:var(--success); font-size:1.3rem;">Done</strong> &mdash; all ${v.totalSteps} moves complete`;
+        if (!autoMarkPlacedTimer && !placement.placed) {
+          autoMarkPlacedTimer = setTimeout(() => {
+            autoMarkPlacedTimer = null;
+            document.getElementById('cubeViewerMarkPlacedBtn')?.click();
+          }, 1500);
+        }
+        const cancelLink = !placement.placed
+          ? ` &nbsp;<button id="cancelAutoMarkBtn" type="button" style="background:none;border:none;padding:0;font-size:0.72rem;color:var(--accent-text);cursor:pointer;text-decoration:underline;">cancel auto-place</button>`
+          : '';
+        label.innerHTML = `<strong style="color:var(--success); font-size:1.3rem;">Done</strong> &mdash; all ${v.totalSteps} moves complete<span style="font-size:0.72rem; color:var(--text-dim);">${cancelLink}</span>`;
+        setTimeout(() => {
+          const cancelBtn = document.getElementById('cancelAutoMarkBtn');
+          if (cancelBtn) cancelBtn.onclick = () => {
+            if (autoMarkPlacedTimer) { clearTimeout(autoMarkPlacedTimer); autoMarkPlacedTimer = null; }
+            label.innerHTML = `<strong style="color:var(--success); font-size:1.3rem;">Done</strong> &mdash; all ${v.totalSteps} moves complete`;
+          };
+        }, 0);
       } else {
+        if (autoMarkPlacedTimer) { clearTimeout(autoMarkPlacedTimer); autoMarkPlacedTimer = null; }
         const nextMove = v.moves[v.currentStep];
-        label.innerHTML = `Turn <strong style="font-size:1.5rem; font-family:'SF Mono',Monaco,monospace;">${nextMove}</strong> next &nbsp;<span style="color:var(--text-dim);">(move ${v.currentStep + 1} of ${v.totalSteps})</span>`;
+        const moveFontSize = viewerLargeText ? '3rem' : '1.5rem';
+        label.innerHTML = `Turn <strong style="font-size:${moveFontSize}; font-family:'SF Mono',Monaco,monospace;">${nextMove}</strong> next &nbsp;<span style="color:var(--text-dim);">(move ${v.currentStep + 1} of ${v.totalSteps})</span>`;
       }
+    }
+    if (v.setFaceHighlight) {
+      v.setFaceHighlight(v.currentStep < v.totalSteps ? v.moves[v.currentStep][0] : null);
     }
     const snapshots = document.getElementById('cubeViewerSnapshots');
     if (snapshots) snapshots.innerHTML = renderCubeViewerSnapshots(placement.startStr, v.moves, v.currentStep);
@@ -5886,6 +6086,8 @@ function openCubeViewer(placementIndex) {
     const prevBtn = document.getElementById('cubeViewerPrevBtn');
     const nextBtn = document.getElementById('cubeViewerNextBtn');
     const playBtn = document.getElementById('cubeViewerPlayBtn');
+    const restartBtn = document.getElementById('cubeViewerRestartBtn');
+    if (restartBtn) restartBtn.disabled = v.currentStep === 0 || v.isAnimating;
     if (prevBtn) prevBtn.disabled = v.currentStep === 0 || v.isAnimating;
     if (nextBtn) nextBtn.disabled = v.currentStep >= v.totalSteps || v.isAnimating;
     if (playBtn) playBtn.disabled = v.totalSteps === 0;
@@ -5893,6 +6095,7 @@ function openCubeViewer(placementIndex) {
   updateStepUI();
 
   document.getElementById('cubeViewerPrevBtn').onclick = () => {
+    if (autoMarkPlacedTimer) { clearTimeout(autoMarkPlacedTimer); autoMarkPlacedTimer = null; }
     if (activeViewerAutoplayTimer) { clearTimeout(activeViewerAutoplayTimer); activeViewerAutoplayTimer = null; document.getElementById('cubeViewerPlayBtn').textContent = 'Play'; }
     activeCubeViewer.jumpTo(activeCubeViewer.currentStep - 1, updateStepUI);
   };
@@ -5917,7 +6120,7 @@ function openCubeViewer(placementIndex) {
       activeCubeViewer.next(() => {
         updateStepUI();
         if (activeCubeViewer.currentStep < activeCubeViewer.totalSteps) {
-          activeViewerAutoplayTimer = setTimeout(tick, 220);
+          activeViewerAutoplayTimer = setTimeout(tick, viewerPlaySpeed);
         } else {
           activeViewerAutoplayTimer = null;
           btn.textContent = 'Play';
