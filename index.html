@@ -620,12 +620,30 @@
     border: 1px solid var(--border);
     border-radius: 14px;
     width: 100%;
-    max-width: 480px;
+    max-width: 520px;
     max-height: 95vh;
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+    overflow-y: auto;
   }
+  /* Canvas + snapshot side by side so the modal fits without scrolling */
+  .cube-viewer-main-row {
+    display: flex;
+    align-items: flex-start;
+    min-height: 0;
+    flex-shrink: 0;
+  }
+  .cube-viewer-main-row .cube-orient-wrap {
+    flex: 0 0 55%;
+  }
+  .cube-viewer-main-row > #cubeViewerSnapshots {
+    flex: 1;
+    padding: 6px 6px 0;
+    min-width: 0;
+  }
+  .cube-viewer-main-row .cube-viewer-snapshots { padding: 0; }
+  .cube-viewer-main-row .cube-viewer-snapshots-row { gap: 4px; }
+  .cube-viewer-main-row .cube-snapshot-arrow { padding-top: 18px; font-size: 0.9rem; }
   .cube-viewer-modal:focus { outline: none; }
   .cube-viewer-header {
     display: flex;
@@ -5765,14 +5783,16 @@ function openCubeViewer(placementIndex) {
           <div style="background:var(--accent); height:100%; width:${(100 * (navPos + 1) / Math.max(1, navigable.length)).toFixed(1)}%;"></div>
         </div>
       </div>
-      <div class="cube-orient-wrap">
-        ${orientLabel('top', 'U')}
-        ${orientLabel('right', 'R')}
-        ${orientLabel('bottom', 'D')}
-        ${orientLabel('left', 'L')}
-        <div class="cube-viewer-canvas-wrap" id="cubeViewerCanvasWrap"></div>
+      <div class="cube-viewer-main-row">
+        <div class="cube-orient-wrap">
+          ${orientLabel('top', 'U')}
+          ${orientLabel('right', 'R')}
+          ${orientLabel('bottom', 'D')}
+          ${orientLabel('left', 'L')}
+          <div class="cube-viewer-canvas-wrap" id="cubeViewerCanvasWrap"></div>
+        </div>
+        <div id="cubeViewerSnapshots"></div>
       </div>
-      <div id="cubeViewerSnapshots"></div>
       <div class="cube-viewer-step-label" id="cubeViewerStepLabel"></div>
       <div class="cube-viewer-moves-strip" id="cubeViewerMovesStrip" tabindex="0" role="group" aria-label="Full move sequence, scrollable"></div>
       <div class="cube-viewer-controls">
