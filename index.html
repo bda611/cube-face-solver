@@ -4431,7 +4431,14 @@ function originalLocationForSavedExportLine(entry, idx) {
     const g = blockGroupForPosition(pos.row, pos.col, geo.boardWidth, geo.boardHeight, geo.boardHeight);
     if (g) boardLabel = blockLabelForGroup(g);
   }
-  return { mosaicName: entry.name, row: pos.row, col: pos.col, boardLabel };
+  // On a board, the row and column have to be the ones on that board.
+  const onBoard = !!boardLabel;
+  return {
+    mosaicName: entry.name,
+    row: onBoard ? (pos.row - 1) % geo.boardHeight + 1 : pos.row,
+    col: onBoard ? (pos.col - 1) % geo.boardWidth + 1 : pos.col,
+    boardLabel,
+  };
 }
 
 function buildPoolForRow(row) {
@@ -5765,6 +5772,19 @@ function blockBoundsForGroup(g, planState) {
   return { rowFrom, rowTo, colFrom, colTo };
 }
 
+// Where a cube goes, in the terms of whatever is in your hands: in board-by-
+// board plans that's the board and the row and column on it, since a row
+// number for the whole mosaic can't be found on a single board.
+function spotLabel(lineNum, planState) {
+  const width = planState.mosaicWidth;
+  const pos = gridPositionForLine(lineNum, width);
+  if (!pos) return `line ${lineNum}`;
+  const g = planBlockOrderActive(planState) ? blockGroupForPlacement({ targetLineNum: lineNum }, planState) : null;
+  if (!g) return `row ${pos.row}, col ${pos.col}`;
+  const bounds = blockBoundsForGroup(g, planState);
+  return `board ${blockLabelForGroup(g)}, row ${pos.row - bounds.rowFrom + 1}, col ${pos.col - bounds.colFrom + 1}`;
+}
+
 // The build order the user physically works in when block mode is on:
 // blocks by (rowGroup asc, colGroup asc) -- bottom section-row first,
 // left-to-right within it, then up a section-row and restart at the
@@ -6682,7 +6702,7 @@ function renderPlanResult() {
       const renderItem = (p) => {
         const i = planState.placements.indexOf(p);
         const pos = gridPositionForLine(p.targetLineNum, width);
-        const posLabel = pos ? `row ${pos.row}, col ${pos.col}` : `line ${p.targetLineNum}`;
+        const posLabel = spotLabel(p.targetLineNum, planState);
         return `
         <div class="match-item ${p.type === 'solve' ? 'solve-item' : ''}" style="${p.placed ? 'opacity:0.45;' : ''}">
           ${planState.status !== 'running' ? `<input type="checkbox" id="placedCheck${i}" ${p.placed ? 'checked' : ''} style="flex-shrink:0; width:18px; height:18px; accent-color:var(--success);" aria-label="Mark target ${posLabel}, pattern ${p.mosaicPattern}, as physically placed">` : ''}
@@ -7189,7 +7209,6 @@ function buildFreeMatchHuntingListHtml(planState) {
   const freeFromPool = planState.placements.filter(p => p.type === 'free' && p.sourceLabel !== 'fresh solved cube' && !p.placed);
   if (freeFromPool.length === 0) return '';
 
-  const width = planState.mosaicWidth;
   const byPattern = new Map(); // mosaicPattern -> { count, lineNums: [] }
   freeFromPool.forEach(p => {
     if (!byPattern.has(p.mosaicPattern)) byPattern.set(p.mosaicPattern, { count: 0, lineNums: [] });
@@ -7210,8 +7229,7 @@ function buildFreeMatchHuntingListHtml(planState) {
     .map(([pattern, info]) => {
       const centerName = mosaicColorName(pattern[4]);
       const posLabels = info.lineNums.slice(0, 5).map(ln => {
-        const pos = gridPositionForLine(ln, width);
-        return pos ? `r${pos.row}c${pos.col}` : `line ${ln}`;
+        return spotLabel(ln, planState);
       }).join(', ') + (info.lineNums.length > 5 ? `, +${info.lineNums.length - 5} more` : '');
       return `
       <tr>
@@ -7278,10 +7296,8 @@ function sourceLabelDisplay(p) {
 }
 
 function exportPlanText(planState, placements) {
-  const width = planState.mosaicWidth;
   return (placements ?? planState.placements).map(p => {
-    const pos = gridPositionForLine(p.targetLineNum, width);
-    const posLabel = pos ? `row ${pos.row} col ${pos.col}` : `line ${p.targetLineNum}`;
+    const posLabel = spotLabel(p.targetLineNum, planState);
     const prefix = p.placed ? '[DONE] ' : '';
     if (p.type === 'free') {
       return `${prefix}Target ${posLabel} (${p.mosaicPattern}): use ${sourceLabelDisplay(p)} -- show its ${FACE_FULL_NAMES[p.face]} face rotated ${p.rotation}\u00b0. No moves needed.`;
@@ -7316,11 +7332,10 @@ function handleDownloadPlan(planState, placements) {
 // minimal rendering: plain black-on-white text, one row per cube,
 // readable at a glance while your hands are full of an actual cube.
 function buildPrintablePlanHtml(planState, placements) {
-  const width = planState.mosaicWidth;
   const list = placements ?? planState.placements;
   const rows = list.map(p => {
-    const pos = gridPositionForLine(p.targetLineNum, width);
-    const posLabel = pos ? `Row ${pos.row}, Col ${pos.col}` : `Line ${p.targetLineNum}`;
+    const spot = spotLabel(p.targetLineNum, planState);
+    const posLabel = spot[0].toUpperCase() + spot.slice(1);
     const instruction = p.type === 'free'
       ? `Show ${FACE_FULL_NAMES[p.face]} face, rotated ${p.rotation}\u00b0 &mdash; no moves needed`
       : `Turns: <strong>${p.moves}</strong> &mdash; then show ${FACE_FULL_NAMES[p.face]} face (${p.moveCount} moves)`;
@@ -8628,12 +8643,9 @@ function openCubeActionMenu(placementIndex) {
   const p = planState.placements[placementIndex];
   if (!p) return;
   closeCubeActionMenu(); // in case one's already open somehow
-  const pos = gridPositionForLine(p.targetLineNum, planState.mosaicWidth);
-  const g = blockGroupForPlacement(p, planState);
-  const boardLabel = g ? blockLabelForGroup(g) : null;
   const hexOf = code => paletteIdToHex(CODE_TO_PALETTE_ID[code]);
   const cells = [...p.mosaicPattern].map(code => `<div style="background:${hexOf(code)};"></div>`).join('');
-  const locLabel = [boardLabel ? `board ${boardLabel}` : null, pos ? `row ${pos.row}, col ${pos.col}` : `line ${p.targetLineNum}`].filter(Boolean).join(' \u2014 ');
+  const locLabel = spotLabel(p.targetLineNum, planState);
 
   const overlay = document.createElement('div');
   overlay.className = 'cube-viewer-overlay';
@@ -8962,6 +8974,41 @@ function setCubeAsideForPlacement(spotIndex, cubeStr, source) {
   return result;
 }
 
+// Puts a cube straight into a spot it already fits, even on a later board.
+// That spot is finished now, so the walkthrough won't stop there again.
+function placeCubeAtSpot(spotIndex, cubeStr, source) {
+  const result = applyCubeStartToPlacement(spotIndex, cubeStr, source);
+  if (result.success) {
+    const planState = appState.patternPlanState;
+    const p = planState.placements[spotIndex];
+    markPlaced(p, true);
+    p.placedAhead = true;
+    if (planState.status === 'done') savePlanRunProgress(planState);
+    renderPlanResult();
+  }
+  return result;
+}
+
+// How to hold a cube that already fits a pattern, so its stickers line up.
+function fitOrientationLabel(cubeStr, mosaicPattern) {
+  const wanted = [...mosaicPattern].map(ch => MOSAIC_CODE_TO_CUBE_LETTER[ch]).join('');
+  const fit = allFaceOrientations(cubeStr).find(o => o.pattern === wanted);
+  if (!fit) return '';
+  const top = topNeighborFace(fit.face, fit.rotation * 90);
+  return `${CUBE3D_FACE_COLOR_NAME[fit.face]} center faces out, ${CUBE3D_FACE_COLOR_NAME[top]} center points up`;
+}
+
+// The next stop in the walkthrough, or -1 if there are none left. Passes over
+// spots already filled by placeCubeAtSpot, which have nothing left to do.
+function nextWalkPosition(navigable, navPos, planState) {
+  if (navPos < 0) return -1;
+  for (let i = navPos + 1; i < navigable.length; i++) {
+    const p = planState.placements[navigable[i]];
+    if (!(p.placed && p.placedAhead)) return i;
+  }
+  return -1;
+}
+
 function openCubePainter(placementIndex) {
   const planState = appState.patternPlanState;
   const placement = planState && planState.placements[placementIndex];
@@ -8995,7 +9042,6 @@ function openCubePainter(placementIndex) {
   };
   const paletteHtml = PALETTE.map(p => `<button type="button" class="paint-swatch" data-code="${p.code}" aria-label="${p.name}"><span class="paint-swatch-dot" style="background:${p.hex};"></span><span>${p.name}</span><span class="paint-swatch-ct" id="paintCt${p.code}"></span></button>`).join('');
 
-  const pos = gridPositionForLine(placement.targetLineNum, planState.mosaicWidth);
   const navigable = cubeViewerNavigableIndices(planState);
   const navPos = navigable.indexOf(placementIndex);
   const tiles = [...placement.mosaicPattern].map(code => `<div style="background:${hexOf(code)};"></div>`).join('');
@@ -9013,7 +9059,7 @@ function openCubePainter(placementIndex) {
       <div class="paint-context">
         <div class="paint-target-tile" role="img" aria-label="Target pattern ${placement.mosaicPattern}">${tiles}</div>
         <div>
-          <div><strong>${navPos >= 0 ? `Cube ${navPos + 1} of ${navigable.length}` : 'This cube'}</strong> &middot; ${pos ? `row ${pos.row}, col ${pos.col}` : `line ${placement.targetLineNum}`}</div>
+          <div><strong>${navPos >= 0 ? `Cube ${navPos + 1} of ${navigable.length}` : 'This cube'}</strong> &middot; ${spotLabel(placement.targetLineNum, planState)}</div>
           <div style="color:var(--text-dim);">Pick up any cube. It will end up showing this pattern.</div>
         </div>
       </div>
@@ -9225,20 +9271,32 @@ function openCubePainter(placementIndex) {
     const spot = findFreeSpotForCube(str, planState, placementIndex);
     if (spot === null) { useCubeHere(btn, str, source); return; }
     const target = planState.placements[spot];
-    const spotPos = gridPositionForLine(target.targetLineNum, planState.mosaicWidth);
-    const where = spotPos ? `row ${spotPos.row}, col ${spotPos.col}` : `line ${target.targetLineNum}`;
+    const where = spotLabel(target.targetLineNum, planState);
     const spotTiles = [...target.mosaicPattern].map(code => `<div style="background:${hexOf(code)};"></div>`).join('');
     offerEl.innerHTML = `
       <div class="paint-target-tile" role="img" aria-label="Pattern ${target.mosaicPattern}">${spotTiles}</div>
       <div class="paint-offer-body">
         <div><strong>This cube fits ${where} with no turns.</strong> Using it there saves about 6 turns.</div>
+        <div style="color:var(--text-dim); font-size:0.72rem; margin-top:2px;">Rows count up from the bottom${planBlockOrderActive(planState) ? ' of the board' : ''}, and columns from the left.</div>
+        <div style="margin-top:4px;">To place it: ${fitOrientationLabel(str, target.mosaicPattern)}.</div>
         <div class="paint-offer-actions">
+          <button type="button" class="secondary-btn" id="paintOfferPlace" style="background:var(--accent); color:var(--on-accent); border-color:var(--accent);">Place it there now</button>
           <button type="button" class="secondary-btn" id="paintOfferAside">Set it aside for ${where}</button>
           <button type="button" class="secondary-btn" id="paintOfferHere">Use it here anyway</button>
         </div>
       </div>`;
     offerEl.hidden = false;
+    const placeBtn = offerEl.querySelector('#paintOfferPlace');
     const asideBtn = offerEl.querySelector('#paintOfferAside');
+    placeBtn.onclick = () => {
+      const orientation = fitOrientationLabel(str, target.mosaicPattern);
+      const result = placeCubeAtSpot(spot, str, source);
+      closeOffer();
+      if (!result.success) { msg(result.error || 'Could not assign this cube there.', true); return; }
+      clearPaint();
+      renderBackupReminder(overlay.querySelector('#paintBackupSlot'), planState);
+      msg(`Marked placed at ${where} (${orientation}). Now pick up another cube for this spot.`);
+    };
     offerEl.querySelector('#paintOfferHere').onclick = () => { closeOffer(); useCubeHere(btn, str, source); };
     asideBtn.onclick = () => {
       const result = setCubeAsideForPlacement(spot, str, source);
@@ -9247,7 +9305,7 @@ function openCubePainter(placementIndex) {
       clearPaint();
       msg(`Set aside for ${where}. Now pick up another cube for this spot.`);
     };
-    asideBtn.focus();
+    placeBtn.focus();
   };
 
   const solveBtn = overlay.querySelector('#paintSolveBtn');
@@ -9331,12 +9389,13 @@ function openCubeViewer(placementIndex) {
   }
   const width = planState.mosaicWidth;
   const pos = gridPositionForLine(placement.targetLineNum, width);
-  const posLabel = pos ? `row ${pos.row}, col ${pos.col}` : `line ${placement.targetLineNum}`;
+  const posLabel = spotLabel(placement.targetLineNum, planState);
   const minimapHtml = buildCubeViewerMinimapHtml(planState.targetsInput, width, placement.targetLineNum);
 
   const navigable = cubeViewerNavigableIndices(planState);
   const navPos = navigable.indexOf(placementIndex); // this cube's position among "cubes needing turns", 0-based
   const placedSoFar = navigable.slice(0, navPos + 1).filter(i => planState.placements[i].placed).length;
+  const nextPos = nextWalkPosition(navigable, navPos, planState);
 
   // Block-by-block context: which board this cube belongs to, how far
   // through that board we are, and -- if it's the board's last cube --
@@ -9354,10 +9413,10 @@ function openCubeViewer(placementIndex) {
         return gg && gg.rowGroup === g.rowGroup && gg.colGroup === g.colGroup;
       });
       const posInBlock = sameBlock.indexOf(placementIndex);
-      const isLastInBlock = posInBlock === sameBlock.length - 1;
+      const isLastInBlock = sameBlock.slice(posInBlock + 1).every(i => planState.placements[i].placed && planState.placements[i].placedAhead);
       let nextBlockLabel = null;
-      if (isLastInBlock && navPos < navigable.length - 1) {
-        const ng = blockGroupForPlacement(planState.placements[navigable[navPos + 1]], planState);
+      if (isLastInBlock && nextPos !== -1) {
+        const ng = blockGroupForPlacement(planState.placements[navigable[nextPos]], planState);
         if (ng) nextBlockLabel = blockLabelForGroup(ng);
       }
       blockInfo = {
@@ -9512,7 +9571,7 @@ function openCubeViewer(placementIndex) {
       <div class="cube-viewer-controls" style="padding-top:0;">
         <button id="cubeViewerPrevCubeBtn" ${(navPos < 0 || navPos <= 0) ? 'disabled' : ''}>&larr; Prev cube</button>
         <button id="cubeViewerMarkPlacedBtn">${placement.placed ? '✓ Placed' : 'Mark placed'}</button>
-        <button id="cubeViewerNextCubeBtn" ${(navPos < 0 || navPos >= navigable.length - 1) ? 'disabled' : ''}>Next cube &rarr;</button>
+        <button id="cubeViewerNextCubeBtn" ${nextPos === -1 ? 'disabled' : ''}>Next cube &rarr;</button>
       </div>
       <div style="text-align:center; padding:2px 16px 0;"><button type="button" id="cubeViewerPaintBtn" class="reset-link" style="font-size:0.7rem; color:var(--accent-text);">&#127912; Cube not in the expected state? Paint its actual state</button></div>
       <div style="text-align:center; padding:4px 16px 2px; font-size:0.78rem; color:var(--text-dim);">When done &rarr; show <strong style="color:var(--text);">${FACE_FULL_NAMES[placement.face]}</strong> face${placement.rotation ? `, rotated ${placement.rotation}&deg;` : ''}</div>
@@ -9540,7 +9599,7 @@ function openCubeViewer(placementIndex) {
   // un-marks, so revisiting an already-placed cube and moving on is
   // harmless.
   const advanceToNextCube = () => {
-    if (navPos >= navigable.length - 1) return;
+    if (nextPos === -1) return;
     const v = activeCubeViewer;
     const finished = v && (v.totalSteps === 0 || v.currentStep >= v.totalSteps);
     if (finished && !placement.placed) {
@@ -9548,7 +9607,7 @@ function openCubeViewer(placementIndex) {
       if (planState.status === 'done') savePlanRunProgress(planState);
       renderPlanResult();
     }
-    openCubeViewer(navigable[navPos + 1]);
+    openCubeViewer(navigable[nextPos]);
   };
   document.getElementById('cubeViewerNextCubeBtn').onclick = advanceToNextCube;
   document.getElementById('cubeViewerMarkPlacedBtn').onclick = () => {
@@ -9706,7 +9765,7 @@ function openCubeViewer(placementIndex) {
     // navigates real solves, is always the true last cube of the whole
     // mosaic. Hoisted here so both the final-step card and the
     // "mark placed" button below can use the same value.
-    const isLastNav = navPos < 0 || navPos >= navigable.length - 1;
+    const isLastNav = nextPos === -1;
     // Final-placement card: visible exactly when there is nothing left
     // to turn -- either this cube never needed moves (free match /
     // already correct) or the person has stepped through them all.

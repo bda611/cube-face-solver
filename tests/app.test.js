@@ -163,6 +163,34 @@ test('boards are named by row letter and place in that row, in build order', () 
   assert.equal(order.join(' '), 'A1 A2 A3 A4 B1 B2 B3 B4 C1 C2 C3 C4 D1 D2 D3 D4 E1 E2 E3 E4');
 });
 
+test('a cube\'s spot is given as its board and the row and column on that board', () => {
+  const { t } = app;
+  const plan = { blockOrder: true, boardWidth: 10, boardHeight: 10, mosaicWidth: 40, totalCount: 2000 };
+  // Whole-mosaic row 16, column 1 is the sixth row of the first board in row B.
+  assert.equal(t.spotLabel(15 * 40 + 1, plan), 'board B1, row 6, col 1');
+  assert.equal(t.spotLabel(1, plan), 'board A1, row 1, col 1');
+  assert.equal(t.spotLabel(2000, plan), 'board E4, row 10, col 10');
+  assert.equal(t.spotLabel(11 * 40 + 25, plan), 'board B3, row 2, col 5');
+});
+
+test('without boards, a spot stays a plain row and column', () => {
+  const { t } = app;
+  const saved = t.appState.patternBlockOrder;
+  t.appState.patternBlockOrder = false;
+  assert.equal(t.spotLabel(15 * 40 + 1, { blockOrder: false, mosaicWidth: 40, totalCount: 2000 }), 'row 16, col 1');
+  assert.equal(t.spotLabel(7, { blockOrder: false, mosaicWidth: null, totalCount: 9 }), 'line 7');
+  t.appState.patternBlockOrder = saved;
+});
+
+test('a reused cube\'s old location uses the row and column on its board', () => {
+  const { t } = app;
+  const entry = { name: 'Old', positions: [15 * 40 + 1], sourceGeometry: { width: 40, blockOrder: true, boardWidth: 10, boardHeight: 10 } };
+  const loc = t.originalLocationForSavedExportLine(entry, 0);
+  assert.equal(loc.boardLabel, 'B1');
+  assert.equal(loc.row, 6);
+  assert.equal(loc.col, 1);
+});
+
 test('Ruwix PDF sections keep the names printed on the PDF', () => {
   const { t } = app;
   assert.equal(t.sectionLabelForPosition(1, 1, 3, 4, 1), 'A1');
@@ -425,6 +453,49 @@ test('a solved cube is matched to a solid-color spot', () => {
   assert.equal(plan.placements[1].moveCount, 0);
   assert.equal(plan.placements[1].setAside, true);
   assert.equal(t.placementNeedsStartChoice(plan.placements[1], plan), false);
+});
+
+test('a cube placed straight into a later spot is finished and saved', () => {
+  const { t } = app;
+  const start = scrambled();
+  const pattern = t.faceGridFromString(start, 'F').flat().map(l => t.CUBE_LETTER_TO_MOSAIC_CODE[l]).join('');
+  const plan = buildPlan(['WYROBGWYR', 'GGGYYYBBB', pattern], paintRow());
+  const spot = t.findFreeSpotForCube(start, plan, 0);
+  assert.equal(spot, 2);
+
+  assert.equal(t.placeCubeAtSpot(spot, start, 'painted').success, true);
+  const p = plan.placements[2];
+  assert.equal(p.placed, true);
+  assert.equal(p.moveCount, 0);
+  assert.equal(p.startStr, start);
+  assert.ok(reachesTarget(p));
+  assert.equal(t.placementNeedsStartChoice(p, plan), false);
+  assert.equal(t.placementNeedsStartChoice(plan.placements[0], plan), true, 'the current spot still needs a cube');
+  assert.equal(t.findFreeSpotForCube(start, plan, 0), null, 'that spot is taken now');
+
+  assert.equal(t.logEntriesForSaving().length, 1, 'a placed cube counts for an early save');
+  assert.equal(t.logEntriesForSaving()[0].resultStr, start);
+  assert.equal(t.loadPlanRunProgress().placements[2].placed, true);
+});
+
+test('the walkthrough skips only spots already filled ahead of time', () => {
+  const { t } = app;
+  const plan = { placements: [{}, { placed: true, placedAhead: true }, { placed: true }, { setAside: true }, { placed: true, placedAhead: true }] };
+  const walk = [0, 1, 2, 3, 4];
+  assert.equal(t.nextWalkPosition(walk, 0, plan), 2, 'a normally placed cube can still be revisited');
+  assert.equal(t.nextWalkPosition(walk, 2, plan), 3, 'a set-aside cube still needs its stop');
+  assert.equal(t.nextWalkPosition(walk, 3, plan), -1, 'only filled spots remain, so this is the last stop');
+  assert.equal(t.nextWalkPosition(walk, -1, plan), -1);
+  plan.placements[1].placed = false; // unchecked by hand, so it needs its stop again
+  assert.equal(t.nextWalkPosition(walk, 0, plan), 1);
+});
+
+test('the holding directions for a cube that fits match where its stickers really are', () => {
+  const { t } = app;
+  const start = scrambled();
+  const pattern = t.faceGridFromString(start, 'F').flat().map(l => t.CUBE_LETTER_TO_MOSAIC_CODE[l]).join('');
+  assert.match(t.fitOrientationLabel(start, pattern), /^Red center faces out, Green center points up$/);
+  assert.equal(t.fitOrientationLabel(t.solvedStateString(), 'WYROBGWYR'), '');
 });
 
 test('painting a set-aside spot again clears the set-aside note', () => {
