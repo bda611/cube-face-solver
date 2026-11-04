@@ -3404,38 +3404,6 @@ function solveForFace(currentStateStr, targetFace, targetGridLetters) {
   };
 }
 
-// Solves a cube back to fully SOLVED (not toward any mosaic target) --
-// the standalone "reset a leftover cube to a known baseline" use case,
-// e.g. after saved reuse data has been lost and the honest fix is to
-// physically re-solve cubes by hand so they're trustworthy again. Much
-// simpler than solveForFace: no target-face/grid to build, just a
-// direct Kociemba solve of the painted state, verified the same way.
-function solveToIdentity(startStr) {
-  let currentCube;
-  try {
-    currentCube = Cube.fromString(startStr);
-  } catch (e) {
-    return { success: false, error: `Invalid cube state: ${e.message}` };
-  }
-  let moves;
-  try {
-    moves = simplifyMoves(currentCube.solve());
-  } catch (e) {
-    return { success: false, error: `Solver error: ${e.message}` };
-  }
-  const verifyCube = Cube.fromString(startStr);
-  if (moves !== '') verifyCube.move(moves);
-  const finalStr = verifyCube.asString();
-  if (finalStr !== solvedStateString()) {
-    return { success: false, error: 'Internal verification failed -- the computed moves did not reach fully solved. Please try again or re-paint the cube.' };
-  }
-  return {
-    success: true,
-    moves: moves === '' ? '(already solved -- no moves needed)' : moves,
-    moveCount: moves === '' ? 0 : moves.split(/\s+/).length,
-    finalStr,
-  };
-}
 const FACE_LETTERS = new Set(['U', 'R', 'F', 'D', 'L', 'B']);
 // Caches parseStartingStateInput's (expensive -- runs a real solve as
 // a legality check) result per unique cleaned 54-letter string, so
@@ -4610,12 +4578,6 @@ function render() {
     <div id="modeBody"></div>
 
     <div class="panel">
-      <h2><span class="step-num">·</span> Solve a single scrambled cube</h2>
-      <p class="panel-desc">Not part of a mosaic plan &mdash; paint a cube's actual current state, face by face, and get the exact turns to bring it back to fully solved. Handy for resetting leftover/reused cubes to a known baseline before starting a new mosaic.</p>
-      <button class="secondary-btn" id="openStandaloneSolverBtn">&#127912; Paint a cube to solve it</button>
-    </div>
-
-    <div class="panel">
       <h2><span class="step-num">·</span> Saved cube states (for reuse in your next mosaic)</h2>
       <p class="panel-desc">${appState.solveLog.length === 0
         ? 'No solves recorded yet this session. After each real solve, the cube\'s verified resulting state is saved here automatically.'
@@ -4637,7 +4599,6 @@ function render() {
   document.getElementById('saveAsNamedExportBtn').onclick = handleSaveAsNamedExport;
   document.getElementById('savedExportsListArea').innerHTML = buildSavedExportsListHtml();
   wireSavedExportsList();
-  document.getElementById('openStandaloneSolverBtn').onclick = () => openCubePainter(null);
   document.getElementById('autoBackupCheck').onchange = (e) => { appState.autoBackupOnSave = e.target.checked; };
   document.getElementById('restoreBackupBtn').onclick = () => document.getElementById('restoreBackupFileInput').click();
   document.getElementById('restoreBackupFileInput').onchange = (e) => {
@@ -8525,12 +8486,11 @@ function renderCubeViewerSnapshots(startStr, movesArr, step) {
 
 // =====================================================================
 // Cube painter: copy the state of the physical cube in your hand, then
-// get the turns from THAT state. Used three ways:
+// get the turns from THAT state. Used two ways:
 //  - "Paint each cube as I go" plans: the walkthrough opens this for any
 //    cube whose start isn't known yet, with an "Already solved" shortcut
 //    since real piles mix solved and scrambled cubes.
 //  - "Cube not in the expected state?" from the 3D viewer.
-//  - Standalone (placementIndex null): paint a cube back to fully solved.
 // Unlike a plan's predicted states, a painted state is what the cube is
 // really in, so it's saved onto the placement -- its finalStr then flows
 // into solveLog and from there into any export reused by a later mosaic.
@@ -8586,14 +8546,9 @@ function applyCubeStartToPlacement(placementIndex, startStr, source) {
 }
 
 function openCubePainter(placementIndex) {
-  // Standalone mode: placementIndex is null/undefined, meaning "just
-  // paint a cube and solve it back to fully solved" -- not tied to any
-  // mosaic target. Used for resetting leftover/reused cubes to a known
-  // baseline, e.g. via the main page's "Solve a scrambled cube" panel.
-  const standalone = placementIndex == null;
-  const planState = standalone ? null : appState.patternPlanState;
-  const placement = standalone ? null : (planState && planState.placements[placementIndex]);
-  if (!standalone && !placement) return;
+  const planState = appState.patternPlanState;
+  const placement = planState && planState.placements[placementIndex];
+  if (!placement) return;
   const hexOf = code => paletteIdToHex(CODE_TO_PALETTE_ID[code]);
 
   // paint[54] = mosaic-colour code per sticker. Every sticker starts white,
@@ -8623,32 +8578,27 @@ function openCubePainter(placementIndex) {
   };
   const paletteHtml = PALETTE.map(p => `<button type="button" class="paint-swatch" data-code="${p.code}" aria-label="${p.name}"><span class="paint-swatch-dot" style="background:${p.hex};"></span><span>${p.name}</span><span class="paint-swatch-ct" id="paintCt${p.code}"></span></button>`).join('');
 
-  let contextHtml = '';
-  if (!standalone) {
-    const pos = gridPositionForLine(placement.targetLineNum, planState.mosaicWidth);
-    const navigable = cubeViewerNavigableIndices(planState);
-    const navPos = navigable.indexOf(placementIndex);
-    const tiles = [...placement.mosaicPattern].map(code => `<div style="background:${hexOf(code)};"></div>`).join('');
-    contextHtml = `
+  const pos = gridPositionForLine(placement.targetLineNum, planState.mosaicWidth);
+  const navigable = cubeViewerNavigableIndices(planState);
+  const navPos = navigable.indexOf(placementIndex);
+  const tiles = [...placement.mosaicPattern].map(code => `<div style="background:${hexOf(code)};"></div>`).join('');
+
+  overlay.innerHTML = `
+    <div class="cube-viewer-modal cube-painter-modal" role="dialog" aria-modal="true" aria-label="Paint your cube's current state" tabindex="-1">
+      <div class="cube-viewer-header">
+        <div>
+          <h3>Paint this cube's current state</h3>
+          <div style="font-size:0.72rem; color:var(--text-dim); margin-top:2px;">Hold your cube with the <strong>green</strong> center on top and the <strong>red</strong> center facing you (white on the right). Every sticker starts white, so only paint the ones that aren't.</div>
+        </div>
+        <button class="cube-viewer-close" id="cubePainterCloseBtn" aria-label="Cancel">&times;</button>
+      </div>
       <div class="paint-context">
         <div class="paint-target-tile" role="img" aria-label="Target pattern ${placement.mosaicPattern}">${tiles}</div>
         <div>
           <div><strong>${navPos >= 0 ? `Cube ${navPos + 1} of ${navigable.length}` : 'This cube'}</strong> &middot; ${pos ? `row ${pos.row}, col ${pos.col}` : `line ${placement.targetLineNum}`}</div>
           <div style="color:var(--text-dim);">Pick up any cube. It will end up showing this pattern.</div>
         </div>
-      </div>`;
-  }
-
-  overlay.innerHTML = `
-    <div class="cube-viewer-modal cube-painter-modal" role="dialog" aria-modal="true" aria-label="Paint your cube's current state" tabindex="-1">
-      <div class="cube-viewer-header">
-        <div>
-          <h3>${standalone ? 'Paint a cube to solve it' : "Paint this cube's current state"}</h3>
-          <div style="font-size:0.72rem; color:var(--text-dim); margin-top:2px;">Hold your cube with the <strong>green</strong> center on top and the <strong>red</strong> center facing you (white on the right). Every sticker starts white, so only paint the ones that aren't.</div>
-        </div>
-        <button class="cube-viewer-close" id="cubePainterCloseBtn" aria-label="Cancel">&times;</button>
       </div>
-      ${contextHtml}
       <div class="paint-palette" role="toolbar" aria-label="Paint colors">${paletteHtml}</div>
       <div class="paint-workbench">
         <div class="paint-stage">
@@ -8665,12 +8615,12 @@ function openCubePainter(placementIndex) {
       </div>
       <div id="paintMsg" role="status" aria-live="polite"></div>
       <div class="cube-viewer-controls">
-        ${standalone ? '' : `<button type="button" id="paintPrevCubeBtn">&larr; Prev cube</button>`}
+        <button type="button" id="paintPrevCubeBtn">&larr; Prev cube</button>
         <button type="button" id="paintResetBtn">Clear</button>
-        ${standalone ? '' : `<button type="button" id="paintAlreadySolvedBtn">Already solved</button>`}
-        <button type="button" id="paintSolveBtn" style="background:var(--accent); color:#1a1209; font-weight:700;">${standalone ? 'Solve this cube' : 'Get the turns &rarr;'}</button>
+        <button type="button" id="paintAlreadySolvedBtn">Already solved</button>
+        <button type="button" id="paintSolveBtn" style="background:var(--accent); color:#1a1209; font-weight:700;">Get the turns &rarr;</button>
       </div>
-      <div class="cube-viewer-hint">Keys: W Y R O B G pick a color &middot; arrows turn the view &middot; Enter gets the turns${standalone ? '' : ' &middot; S already solved &middot; [ prev cube'}</div>
+      <div class="cube-viewer-hint">Keys: W Y R O B G pick a color &middot; arrows turn the view &middot; Enter gets the turns &middot; S already solved &middot; [ prev cube</div>
     </div>`;
   document.body.appendChild(overlay);
   overlay.onclick = (e) => { if (e.target === overlay) closeCubePainter(); };
@@ -8798,13 +8748,6 @@ function openCubePainter(placementIndex) {
       return;
     }
     runAfterPaint(solveBtn, () => {
-      if (standalone) {
-        const result = solveToIdentity(str);
-        if (!result.success) return result;
-        closeCubePainter();
-        openStandaloneCubeViewer(str, result.moveCount === 0 ? '' : result.moves, result.moveCount);
-        return result;
-      }
       const result = applyCubeStartToPlacement(placementIndex, str, 'painted');
       if (!result.success) return result;
       closeCubePainter();
@@ -8814,7 +8757,7 @@ function openCubePainter(placementIndex) {
   };
 
   const alreadySolvedBtn = overlay.querySelector('#paintAlreadySolvedBtn');
-  if (alreadySolvedBtn) alreadySolvedBtn.onclick = () => {
+  alreadySolvedBtn.onclick = () => {
     if (alreadySolvedBtn.disabled) return;
     runAfterPaint(alreadySolvedBtn, () => {
       const result = applyCubeStartToPlacement(placementIndex, solvedStateString(), 'solved');
@@ -8827,17 +8770,13 @@ function openCubePainter(placementIndex) {
 
   const prevCubeBtn = overlay.querySelector('#paintPrevCubeBtn');
   const goToPrevCube = () => {
-    const navigable = cubeViewerNavigableIndices(planState);
-    const navPos = navigable.indexOf(placementIndex);
     if (navPos > 0) {
       closeCubePainter();
       openCubeViewer(navigable[navPos - 1]);
     }
   };
-  if (prevCubeBtn) {
-    prevCubeBtn.disabled = cubeViewerNavigableIndices(planState).indexOf(placementIndex) <= 0;
-    prevCubeBtn.onclick = goToPrevCube;
-  }
+  prevCubeBtn.disabled = navPos <= 0;
+  prevCubeBtn.onclick = goToPrevCube;
 
   overlay.querySelector('#cubePainterCloseBtn').onclick = closeCubePainter;
 
@@ -8855,190 +8794,12 @@ function openCubePainter(placementIndex) {
     if (e.key === 'ArrowRight') { e.preventDefault(); if (painterViewer) painterViewer.turnView(1); return; }
     if (e.key === 'ArrowDown') { e.preventDefault(); setTilt(true); return; }
     if (e.key === 'ArrowUp') { e.preventDefault(); setTilt(false); return; }
-    if (e.key === '[') { e.preventDefault(); if (!standalone) goToPrevCube(); return; }
+    if (e.key === '[') { e.preventDefault(); goToPrevCube(); return; }
     const key = e.key.toUpperCase();
-    if (key === 'S' && alreadySolvedBtn) { e.preventDefault(); alreadySolvedBtn.click(); return; }
+    if (key === 'S') { e.preventDefault(); alreadySolvedBtn.click(); return; }
     if (VALID_CODES.has(key)) { e.preventDefault(); setActive(key); }
   };
   document.addEventListener('keydown', painterKeydownHandler);
-}
-
-// --- Standalone 3D viewer: for solveToIdentity results, not tied to
-// any mosaic plan. A trimmed-down sibling of openCubeViewer -- same
-// 3D engine (createCubeViewer) and visual language, but without
-// anything that only makes sense inside a mosaic plan (position
-// labels, mark-placed, next-cube nav, board dashboard, the congrats
-// prompt). Just: watch the turns, done.
-let activeStandaloneCubeViewer = null;
-let standaloneViewerAutoplayTimer = null;
-let standaloneViewerKeydownHandler = null;
-
-function closeStandaloneCubeViewer() {
-  if (standaloneViewerAutoplayTimer) { clearTimeout(standaloneViewerAutoplayTimer); standaloneViewerAutoplayTimer = null; }
-  if (activeStandaloneCubeViewer) { activeStandaloneCubeViewer.dispose(); activeStandaloneCubeViewer = null; }
-  const overlay = document.getElementById('standaloneCubeViewerOverlay');
-  if (overlay) overlay.remove();
-  if (standaloneViewerKeydownHandler) { document.removeEventListener('keydown', standaloneViewerKeydownHandler); standaloneViewerKeydownHandler = null; }
-}
-
-function openStandaloneCubeViewer(startStr, moves, moveCount) {
-  if (typeof THREE === 'undefined') {
-    alert("The 3D viewer couldn't load (this needs an internet connection to fetch the Three.js library). The move list below still works fine without it.");
-    return;
-  }
-  closeStandaloneCubeViewer();
-  const overlay = document.createElement('div');
-  overlay.className = 'cube-viewer-overlay';
-  overlay.id = 'standaloneCubeViewerOverlay';
-
-  const orientLabel = (pos, face) =>
-    `<div class="cube-orient-label cube-orient-${pos}"><span class="cube-orient-dot" style="background:${CUBE3D_PALETTE_HEX[face]}"></span>${CUBE3D_FACE_COLOR_NAME[face]} &middot; ${pos}</div>`;
-
-  overlay.innerHTML = `
-    <div class="cube-viewer-modal" role="dialog" aria-modal="true" aria-labelledby="standaloneViewerTitle" tabindex="-1">
-      <div class="cube-viewer-header">
-        <div>
-          <h3 id="standaloneViewerTitle">Solve this cube</h3>
-          <div style="font-size:0.72rem; color:var(--text-dim); margin-top:2px;">${moveCount === 0 ? 'Already solved &mdash; no moves needed.' : `${moveCount} move${moveCount === 1 ? '' : 's'} to fully solved`}</div>
-        </div>
-        <button class="cube-viewer-close" id="standaloneViewerCloseBtn" aria-label="Close">&times;</button>
-      </div>
-      <div class="cube-viewer-main-row">
-        <div class="cube-orient-wrap">
-          ${orientLabel('top', 'U')}
-          ${orientLabel('right', 'R')}
-          ${orientLabel('bottom', 'D')}
-          ${orientLabel('left', 'L')}
-          <div class="cube-viewer-canvas-wrap" id="standaloneViewerCanvasWrap"></div>
-        </div>
-      </div>
-      <div id="standaloneViewerFinalStep" aria-live="polite"></div>
-      <div style="display:flex; align-items:center; gap:8px; padding:10px 16px 4px;">
-        <div class="cube-viewer-step-label" id="standaloneViewerStepLabel" style="flex:1; padding:0;"></div>
-      </div>
-      <div class="cube-viewer-moves-strip" id="standaloneViewerMovesStrip" tabindex="0" role="group" aria-label="Full move sequence, scrollable"></div>
-      <div style="padding:2px 16px 0;">
-        <input type="range" id="standaloneViewerScrubber" min="0" max="${moveCount}" value="0" style="width:100%; accent-color:var(--accent); cursor:pointer;" aria-label="Jump to move step">
-      </div>
-      <div class="cube-viewer-controls">
-        <button id="standaloneViewerRestartBtn">&#8635; Restart</button>
-        <button id="standaloneViewerPrevBtn">&larr; Prev</button>
-        <button id="standaloneViewerPlayBtn" class="play-btn">Play</button>
-        <button id="standaloneViewerNextBtn">Next &rarr;</button>
-      </div>
-      <div style="display:flex; align-items:center; gap:6px; padding:2px 16px 10px; justify-content:center; flex-wrap:wrap;">
-        <span style="font-size:0.68rem; color:var(--text-dim);">Speed:</span>
-        <button data-speed="450" class="viewer-speed-chip" style="padding:2px 10px; border-radius:5px; font-size:0.7rem; cursor:pointer; border:1px solid;">Slow</button>
-        <button data-speed="220" class="viewer-speed-chip" style="padding:2px 10px; border-radius:5px; font-size:0.7rem; cursor:pointer; border:1px solid;">Normal</button>
-        <button data-speed="80" class="viewer-speed-chip" style="padding:2px 10px; border-radius:5px; font-size:0.7rem; cursor:pointer; border:1px solid;">Fast</button>
-        <span style="color:var(--border);">|</span>
-        <button id="standaloneViewerFlipBtn" style="padding:2px 10px; border-radius:5px; font-size:0.7rem; cursor:pointer; border:1px solid var(--border); background:#2e2e2e; color:var(--text);" title="Flip cube to see back (F key)">&#8644; Flip</button>
-      </div>
-      <div class="cube-viewer-hint">Drag to rotate &middot; &#8592; &#8594; moves &middot; Space play/pause &middot; F flip</div>
-    </div>`;
-  document.body.appendChild(overlay);
-  overlay.onclick = (e) => { if (e.target === overlay) closeStandaloneCubeViewer(); };
-  document.getElementById('standaloneViewerCloseBtn').onclick = closeStandaloneCubeViewer;
-  const modalEl = overlay.querySelector('.cube-viewer-modal');
-  if (modalEl) modalEl.focus();
-
-  const canvasWrap = document.getElementById('standaloneViewerCanvasWrap');
-  let v;
-  try {
-    v = createCubeViewer(canvasWrap, startStr, moves);
-  } catch (e) {
-    closeStandaloneCubeViewer();
-    alert("Couldn't start the 3D viewer on this device (" + e.message + "). The move list still works fine without it.");
-    return;
-  }
-  activeStandaloneCubeViewer = v;
-
-  function updateUI() {
-    const atEnd = v.totalSteps === 0 || v.currentStep >= v.totalSteps;
-    const stepLabel = document.getElementById('standaloneViewerStepLabel');
-    if (stepLabel) {
-      stepLabel.textContent = v.totalSteps === 0 ? 'Already solved'
-        : atEnd ? `All ${v.totalSteps} moves done`
-        : `Move ${v.currentStep + 1} of ${v.totalSteps}: ${cube3dDescribeMove(v.moves[v.currentStep])}`;
-    }
-    v.setMoveGuide(atEnd ? null : v.moves[v.currentStep]);
-    const finalStepEl = document.getElementById('standaloneViewerFinalStep');
-    if (finalStepEl) {
-      finalStepEl.innerHTML = atEnd
-        ? `<div style="margin:8px 16px 2px; padding:10px 12px; border:1px solid var(--success); border-radius:8px; background:rgba(0,155,72,0.08); font-size:0.82rem; text-align:center; color:var(--success); font-weight:700;">&#10003; Solved! This cube is now fully solved &mdash; ready to use as a normal solved cube in a future mosaic.</div>`
-        : '';
-    }
-    const strip = document.getElementById('standaloneViewerMovesStrip');
-    if (strip) {
-      strip.innerHTML = v.totalSteps === 0
-        ? '<span style="color:var(--text-dim); font-size:0.78rem; padding:4px 8px;">No moves needed.</span>'
-        : v.moves.map((m, i) => `<span class="cube-viewer-move-chip ${i === v.currentStep ? 'current' : ''} ${i < v.currentStep ? 'done' : ''}">${m}</span>`).join('');
-      const currentChip = strip.querySelector('.current');
-      if (currentChip && typeof currentChip.scrollIntoView === 'function') currentChip.scrollIntoView({ block: 'nearest', inline: 'center' });
-    }
-    const prevBtn = document.getElementById('standaloneViewerPrevBtn');
-    const nextBtn = document.getElementById('standaloneViewerNextBtn');
-    const playBtn = document.getElementById('standaloneViewerPlayBtn');
-    if (prevBtn) prevBtn.disabled = v.currentStep <= 0;
-    if (nextBtn) nextBtn.disabled = atEnd;
-    if (playBtn) playBtn.disabled = atEnd;
-    const scrubber = document.getElementById('standaloneViewerScrubber');
-    if (scrubber) scrubber.value = v.currentStep;
-  }
-
-  const playBtn = document.getElementById('standaloneViewerPlayBtn');
-  document.getElementById('standaloneViewerRestartBtn').onclick = () => {
-    if (standaloneViewerAutoplayTimer) { clearTimeout(standaloneViewerAutoplayTimer); standaloneViewerAutoplayTimer = null; playBtn.textContent = 'Play'; }
-    v.jumpTo(0, updateUI);
-  };
-  document.getElementById('standaloneViewerPrevBtn').onclick = () => { v.jumpTo(Math.max(0, v.currentStep - 1), updateUI); };
-  document.getElementById('standaloneViewerNextBtn').onclick = () => { if (!v.isAnimating) v.next(updateUI); };
-  playBtn.onclick = () => {
-    if (v.isAnimating) return;
-    if (standaloneViewerAutoplayTimer) {
-      clearTimeout(standaloneViewerAutoplayTimer); standaloneViewerAutoplayTimer = null;
-      playBtn.textContent = 'Play';
-      return;
-    }
-    playBtn.textContent = 'Pause';
-    const step = () => {
-      if (v.currentStep >= v.totalSteps) { standaloneViewerAutoplayTimer = null; playBtn.textContent = 'Play'; updateUI(); return; }
-      v.next(() => {
-        updateUI();
-        if (v.currentStep < v.totalSteps) standaloneViewerAutoplayTimer = setTimeout(step, viewerPlaySpeed);
-        else { standaloneViewerAutoplayTimer = null; playBtn.textContent = 'Play'; }
-      });
-    };
-    step();
-  };
-  document.getElementById('standaloneViewerScrubber').oninput = (e) => {
-    if (standaloneViewerAutoplayTimer) { clearTimeout(standaloneViewerAutoplayTimer); standaloneViewerAutoplayTimer = null; playBtn.textContent = 'Play'; }
-    v.jumpTo(parseInt(e.target.value, 10) || 0, updateUI);
-  };
-  function applySpeedStyles() {
-    overlay.querySelectorAll('.viewer-speed-chip').forEach(btn => {
-      const active = parseInt(btn.dataset.speed, 10) === viewerPlaySpeed;
-      btn.style.borderColor = active ? 'var(--accent)' : 'var(--border)';
-      btn.style.background = active ? 'var(--accent)' : '#2e2e2e';
-      btn.style.color = active ? '#1a1209' : 'var(--text)';
-    });
-  }
-  overlay.querySelectorAll('.viewer-speed-chip').forEach(btn => {
-    btn.onclick = () => { viewerPlaySpeed = parseInt(btn.dataset.speed, 10); applySpeedStyles(); };
-  });
-  applySpeedStyles();
-  document.getElementById('standaloneViewerFlipBtn').onclick = () => v.flip();
-
-  standaloneViewerKeydownHandler = (e) => {
-    if (e.key === 'Escape') { closeStandaloneCubeViewer(); return; }
-    if (e.key === ' ') { e.preventDefault(); playBtn.onclick(); return; }
-    if (e.key === 'ArrowRight') { e.preventDefault(); document.getElementById('standaloneViewerNextBtn').onclick(); return; }
-    if (e.key === 'ArrowLeft') { e.preventDefault(); document.getElementById('standaloneViewerPrevBtn').onclick(); return; }
-    if (e.key === 'f' || e.key === 'F') { e.preventDefault(); v.flip(); return; }
-  };
-  document.addEventListener('keydown', standaloneViewerKeydownHandler);
-
-  updateUI();
 }
 
 function openCubeViewer(placementIndex) {
