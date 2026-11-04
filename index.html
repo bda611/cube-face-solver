@@ -602,6 +602,12 @@
   .paint-view-btn { position:absolute; width:36px; height:36px; padding:0; border-radius:50%; border:1px solid var(--border); background:var(--control); color:var(--text); font-size:1.2rem; line-height:1; cursor:pointer; }
   #paintMsg { min-height:1.2em; padding:6px 16px 0; font-size:0.78rem; color:var(--text-dim); }
   #paintMsg.paint-msg-error { color:var(--error); font-weight:600; }
+  .paint-cell.paint-cursor { outline:3px solid #e532c8; outline-offset:1px; position:relative; z-index:2; }
+  #paintCursorLabel { padding:6px 16px 0; font-size:0.82rem; font-weight:600; }
+  #paintMatchOffer:not([hidden]) { display:flex; align-items:center; gap:12px; margin:8px 16px 0; padding:10px 12px; border:1px solid var(--accent); border-radius:8px; background:#edf3fd; font-size:0.8rem; }
+  .paint-offer-body { min-width:0; }
+  .paint-offer-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
+  .paint-offer-actions .secondary-btn { margin:0; }
   .paint-cell.paint-flag { outline:3px solid var(--error); outline-offset:1px; position:relative; z-index:1; }
   @media (max-width: 640px) { .paint-workbench { grid-template-columns:minmax(0, 1fr); } }
   .paint-net { display:flex; flex-direction:column; align-items:center; gap:4px; padding:8px 0; min-width:0; touch-action:none; user-select:none; -webkit-user-select:none; }
@@ -702,35 +708,28 @@
     flex-direction: column;
     overflow-y: auto;
   }
-  /* Canvas + snapshot side by side so the modal fits without scrolling */
-  .cube-viewer-main-row {
-    display: flex;
-    align-items: flex-start;
-    min-height: 0;
-    flex-shrink: 0;
+  /* The cube and map on the left, the steps and controls on the right, so
+     everything needed while turning fits on a laptop screen without
+     scrolling. Narrow screens stack the two columns. */
+  .cube-viewer-modal.cube-viewer-wide { max-width: 1000px; }
+  .cube-viewer-body { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; flex-shrink: 0; }
+  .cube-viewer-col-cube, .cube-viewer-col-steps { min-width: 0; }
+  .cube-viewer-col-cube { padding: 0 16px 10px; }
+  .cube-viewer-col-cube .cube-viewer-minimap { padding: 10px 0 0; justify-content: center; }
+  #cubeViewerSnapshots { padding: 0 16px; }
+  #cubeViewerSnapshots .cube-viewer-snapshots { padding: 0; }
+  #cubeViewerSnapshots .cube-viewer-snapshots-row { gap: 4px; justify-content: center; }
+  @media (min-width: 860px) {
+    .cube-viewer-body { grid-template-columns: minmax(0, 44%) minmax(0, 56%); }
   }
-  .cube-viewer-main-row .cube-orient-wrap {
-    flex: 0 0 55%;
-  }
-  .cube-viewer-main-row > #cubeViewerSnapshots {
-    flex: 1;
-    padding: 6px 6px 0;
-    min-width: 0;
-    align-self: stretch;
-  }
-  .cube-viewer-main-row .cube-viewer-snapshots { padding: 0; }
-  .cube-viewer-main-row .cube-viewer-snapshots-row { gap: 4px; }
-  .cube-viewer-main-row .cube-snapshot-arrow { padding-top: 18px; font-size: 0.9rem; }
   /* Once a cube's final move is done, the before/after snapshot panel has
      nothing left to show -- this fills that space with the primary action
      instead, so it sits beside the finished cube rather than below it. */
   .cube-viewer-final-btn-wrap {
-    height: 100%;
-    min-height: 140px;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 6px 4px;
+    padding: 6px 0;
   }
   .cube-viewer-final-btn-wrap button {
     width: 100%;
@@ -744,11 +743,13 @@
     cursor: pointer;
   }
   .cube-viewer-modal:focus { outline: none; }
+  .backup-reminder { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin:0 16px 8px; padding:8px 12px; border:1px solid var(--free); border-radius:8px; background:rgba(217,181,60,0.08); font-size:0.78rem; }
+  .backup-reminder .secondary-btn { margin:0; flex-shrink:0; }
   .cube-viewer-header {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    padding: 14px 16px 10px;
+    padding: 10px 16px 6px;
     flex-shrink: 0;
   }
   .cube-viewer-header h3 { margin: 0; font-size: 0.95rem; font-weight: 600; }
@@ -769,20 +770,17 @@
     touch-action: none;
   }
   .cube-viewer-canvas-wrap canvas { display: block; width: 100%; height: 100%; }
-  .cube-orient-wrap { position: relative; flex-shrink: 0; }
+  .cube-orient-wrap { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; flex-shrink: 0; }
+  .cube-orient-wrap .cube-viewer-canvas-wrap { flex: 0 0 100%; }
   .cube-orient-label {
-    position: absolute;
-    background: rgba(255,255,255,0.92);
     color: var(--text);
     display: flex;
     align-items: center;
-    gap: 5px;
-    padding: 3px 8px 3px 5px;
+    gap: 4px;
+    padding: 2px 6px 2px 4px;
     border-radius: 4px;
-    font-size: 0.68rem;
+    font-size: 0.62rem;
     font-weight: 600;
-    z-index: 5;
-    pointer-events: none;
     border: 1px solid var(--border);
     white-space: nowrap;
     letter-spacing: 0.01em;
@@ -795,10 +793,6 @@
     flex-shrink: 0;
     border: 1px solid rgba(0,0,0,0.35);
   }
-  .cube-orient-top    { top: 8px;    left: 50%; transform: translateX(-50%); }
-  .cube-orient-bottom { bottom: 8px; left: 50%; transform: translateX(-50%); }
-  .cube-orient-left   { left: 8px;   top: 50%;  transform: translateY(-50%); }
-  .cube-orient-right  { right: 8px;  top: 50%;  transform: translateY(-50%); }
   .cube-viewer-snapshots { padding: 6px 16px 0; }
   .cube-snapshot-move-desc { font-size:0.72rem; font-weight:600; color:var(--text); text-align:center; margin-bottom:6px; }
   .cube-viewer-snapshots-row { display:flex; gap:10px; justify-content:center; align-items:flex-start; }
@@ -3791,7 +3785,7 @@ function saveCurrentLogAsExport(name) {
     finalName = `${name} (${suffix})`;
     suffix++;
   }
-  const lines = appState.solveLog.map(e => e.resultStr);
+  const lines = logEntriesForSaving().map(e => e.resultStr);
   // Also capture the target mosaic's pattern + width, if a finished
   // plan is currently loaded -- purely so the "Saved mosaics" list can
   // show a little visual preview of what this mosaic actually looked
@@ -3823,7 +3817,7 @@ function saveCurrentLogAsExport(name) {
 function buildSaveLocationMetadata() {
   const plan = appState.patternPlanState;
   const hasGeometry = !!(plan && plan.status === 'done' && plan.mosaicWidth);
-  const positions = appState.solveLog.map(e => (typeof e.targetLineNum === 'number' ? e.targetLineNum : null));
+  const positions = logEntriesForSaving().map(e => (typeof e.targetLineNum === 'number' ? e.targetLineNum : null));
   const sourceGeometry = hasGeometry
     ? { width: plan.mosaicWidth, blockOrder: !!plan.blockOrder, boardWidth: plan.boardWidth, boardHeight: plan.boardHeight }
     : null;
@@ -3891,7 +3885,7 @@ function resaveSavedExport(name) {
   const list = loadSavedExports();
   const idx = list.findIndex(e => e.name === name);
   if (idx === -1) return false;
-  const lines = appState.solveLog.map(e => e.resultStr);
+  const lines = logEntriesForSaving().map(e => e.resultStr);
   const plan = appState.patternPlanState;
   const thumbnailSource = (plan && plan.status === 'done' && plan.targetsInput && plan.mosaicWidth)
     ? { targetsInput: plan.targetsInput, mosaicWidth: plan.mosaicWidth }
@@ -4057,6 +4051,7 @@ function wireSavedExportsList() {
         };
         render();
       } else if (action === 'resave') {
+        if (!confirmPartialSave()) return;
         const ok = resaveSavedExport(name);
         if (ok && appState.autoBackupOnSave) downloadSavedExportBackup(name);
         appState.savedExportsUi = {
@@ -4480,6 +4475,16 @@ function solveForFaceCacheKey(sourceStr, targetFace, cubeGrid) {
 // where), and one may be reachable in fewer turns from this cube's state.
 // Returns { result, rotation }; result.success is false if all failed.
 function bestSolveForTarget(sourceStr, targetFace, cubeGrid, rotationsToTry, cache) {
+  // solveForFace aims for one specific full-cube arrangement, so it would
+  // spend about 20 turns on a cube that already shows the pattern.
+  const wanted = cubeGrid.flat().join('');
+  const alreadyShowing = allFaceOrientations(sourceStr).find(o => o.face === targetFace && o.pattern === wanted);
+  if (alreadyShowing) {
+    return {
+      result: { success: true, moves: '(already matches -- no moves needed)', moveCount: 0, finalStr: sourceStr },
+      rotation: alreadyShowing.rotation,
+    };
+  }
   let best = null;        // { result, rotation } for the cheapest SUCCESSFUL attempt so far
   let lastFailure = null; // fallback error to report if every rotation fails
   for (const rot of rotationsToTry) {
@@ -4613,16 +4618,22 @@ function render() {
     const file = e.target.files && e.target.files[0];
     e.target.value = ''; // so re-selecting the SAME file still fires change next time
     if (!file) return;
-    const statusEl = document.getElementById('restoreBackupStatus');
     const reader = new FileReader();
     reader.onload = () => {
-      const result = restoreSavedExportFromBackupJson(String(reader.result));
-      if (statusEl) {
-        statusEl.innerHTML = result.ok
-          ? `<span style="color:var(--success);">&#10003; Restored as "${result.finalName}".</span>`
-          : `<span style="color:var(--error);">${(result.error || "Couldn't restore -- browser storage is full or unavailable.").replace(/</g, '&lt;')}</span>`;
-      }
+      const text = String(reader.result);
+      const isPlan = isPlanBackupJson(text);
+      const current = appState.patternPlanState;
+      if (isPlan && current && current.placements.length > 0 && typeof confirm === 'function'
+          && !confirm(`This replaces the plan that's open now (${current.placements.filter(p => p.placed).length} of ${current.placements.length} cubes placed) with the one in the backup. Continue?`)) return;
+      const result = isPlan ? restorePlanFromBackupJson(text) : restoreSavedExportFromBackupJson(text);
+      const message = !result.ok
+        ? `<span style="color:var(--error);">${(result.error || "Couldn't restore -- browser storage is full or unavailable.").replace(/</g, '&lt;')}</span>`
+        : isPlan
+          ? `<span style="color:var(--success);">&#10003; Restored your mosaic progress: ${result.placed} of ${result.total} cubes placed.</span>`
+          : `<span style="color:var(--success);">&#10003; Restored as "${result.finalName}".</span>`;
       if (result.ok) render();
+      const statusNow = document.getElementById('restoreBackupStatus'); // render() replaces the original element
+      if (statusNow) statusNow.innerHTML = message;
     };
     reader.onerror = () => { if (statusEl) statusEl.innerHTML = `<span style="color:var(--error);">Couldn't read that file.</span>`; };
     reader.readAsText(file);
@@ -6457,7 +6468,7 @@ function renderPlanResult() {
           ${current ? `<span style="color:var(--text-dim);">Current: board <strong style="color:var(--accent-text);">${current.label}</strong></span>` : `<span style="color:var(--success);">&#10003; all boards complete</span>`}
         </div>
         ${(() => { const est = estimateTimeRemaining(planState); return est ? `<div style="font-size:0.72rem; color:var(--text-dim); margin-bottom:8px;">&#8987; ~${formatDuration(est.remainMs)} of solving left &middot; ~${est.secPerCube}s/cube at your recent pace</div>` : ''; })()}
-        <div class="board-map" style="grid-template-columns:repeat(${nCols}, 1fr);">${cells}</div>
+        <div class="board-map" style="grid-template-columns:repeat(${nCols}, minmax(0, 72px));">${cells}</div>
         <div class="board-map-legend"><span><i style="background:var(--track);"></i>not started</span><span><i style="background:${blend(0.5)};"></i>in progress</span><span><i style="background:var(--success);"></i>done</span><span style="margin-left:auto;">tap a board to open it</span></div>
       </div>`;
   })() : '';
@@ -6687,6 +6698,7 @@ function renderPlanResult() {
       <button class="secondary-btn" id="copyPlanBtn" style="flex:1; margin:0; text-align:center;">${filterActive ? 'Copy filtered' : 'Copy as text'}</button>
       <button class="secondary-btn" id="downloadPlanBtn" style="flex:1; margin:0; text-align:center;">${filterActive ? 'Download filtered .txt' : 'Download .txt'}</button>
       <button class="secondary-btn" id="printPlanBtn" style="flex:1; margin:0; text-align:center;">${filterActive ? 'Print filtered' : 'Print'}</button>
+      <button class="secondary-btn" id="backupPlanBtn" style="flex:1 1 100%; margin:0; text-align:center;">Download progress backup${planState.lastBackupPlacedCount ? ` (last at ${planState.lastBackupPlacedCount} placed)` : ''}</button>
     </div>
     ` : ''}
   `;
@@ -6710,6 +6722,8 @@ function renderPlanResult() {
   if (downloadBtn) downloadBtn.onclick = () => handleDownloadPlan(planState, exportList);
   const printBtn = document.getElementById('printPlanBtn');
   if (printBtn) printBtn.onclick = () => handlePrintPlan(planState, exportList);
+  const backupBtn = document.getElementById('backupPlanBtn');
+  if (backupBtn) backupBtn.onclick = () => { downloadPlanBackup(planState); renderPlanResult(); };
   const fromInput = document.getElementById('rowFilterFrom');
   const toInput = document.getElementById('rowFilterTo');
   if (fromInput) fromInput.oninput = (e) => {
@@ -6893,13 +6907,63 @@ function renderPlanResult() {
   scheduleMosaicProgressPreview();
 }
 
-// Shows an inline mini-form under a single placement row, letting you
-// correct that ONE target's 9-letter pattern and re-solve just that
-// row -- without resubmitting (and re-waiting on) the entire mosaic.
-// Re-solves against a fresh solved cube (the simplest always-correct
-// choice for a single isolated fix; re-deriving which pool cube was
-// originally assigned to this row would require re-running the whole
-// allocation, which defeats the point of a quick single-row fix).
+// Keeps the saved-state list showing one entry per cube, with this cube's
+// current final state.
+function syncPlacementToSolveLog(p) {
+  const entry = appState.solveLog.find(e => e.targetLineNum === p.targetLineNum);
+  if (entry) entry.resultStr = p.finalStr;
+  else appState.solveLog.push({ source: 'pattern', label: `target line ${p.targetLineNum}`, resultStr: p.finalStr, targetLineNum: p.targetLineNum });
+}
+
+// Changes one target's pattern and re-solves just that cube, without
+// resubmitting the entire mosaic. The turns start from where that cube
+// really is: its final state if it was already placed, since it has been
+// turned, otherwise its starting state. A paint-as-you-go cube that hasn't
+// been painted yet stays that way, so it still gets painted when reached.
+function correctPlacementTarget(i, rawPattern) {
+  const planState = appState.patternPlanState;
+  const p = planState.placements[i];
+  const { targets, errors } = parseMosaicTargets(rawPattern);
+  if (errors.length > 0 || targets.length !== 1) {
+    return { success: false, error: errors[0] || 'Enter exactly 9 letters (W/Y/R/O/B/G).' };
+  }
+  const target = targets[0];
+  const targetFace = target.cubeGrid[1][1];
+  const startUnknown = placementNeedsStartChoice(p, planState);
+  const startStr = p.placed ? p.finalStr : p.startStr;
+  const startsSolved = startStr === solvedStateString();
+  const { result, rotation } = bestSolveForTarget(startStr, targetFace, target.cubeGrid, startsSolved ? [0] : [0, 1, 2, 3]);
+  if (!result.success) return result;
+
+  const inputLines = planState.targetsInput.split('\n');
+  inputLines[p.targetLineNum - 1] = target.mosaicPattern;
+  const newInput = inputLines.join('\n');
+  if (appState.patternTargetInput === planState.targetsInput) appState.patternTargetInput = newInput;
+  planState.targetsInput = newInput;
+
+  p.mosaicPattern = target.mosaicPattern;
+  p.type = 'solve';
+  p.face = targetFace;
+  p.rotation = rotation * 90;
+  p.moves = result.moves;
+  p.moveCount = result.moveCount;
+  p.startStr = startStr;
+  p.finalStr = result.finalStr;
+  if (!startUnknown) {
+    if (p.placed) p.sourceLabel = 'the cube already placed here (manual fix)';
+    else if (p.sourceLabel === 'fresh solved cube') p.sourceLabel = 'fresh solved cube (manual fix)';
+    p.startSource = p.startSource || 'fixed';
+  }
+  markPlaced(p, false); // re-solved -- if the old version was already marked placed, that's now stale/wrong
+  p.verified = false; // and any earlier verification of the old pattern no longer applies either
+  p.flagged = false;
+  syncPlacementToSolveLog(p);
+  if (planState.status === 'done') savePlanRunProgress(planState); // keep any persisted copy in sync, in case it's later resumed/inspected
+  return { success: true };
+}
+
+// Shows an inline mini-form under a single placement row for correcting
+// that target's pattern (see correctPlacementTarget).
 function renderEditRow(i) {
   const area = document.getElementById(`editRowArea${i}`);
   if (!area) return;
@@ -6915,40 +6979,11 @@ function renderEditRow(i) {
   document.getElementById('editRowCancelBtn' + i).onclick = () => { area.innerHTML = ''; };
   document.getElementById('editRowSolveBtn' + i).onclick = () => {
     const raw = document.getElementById(`editRowInput${i}`).value.trim().toUpperCase();
-    const { targets, errors } = parseMosaicTargets(raw);
-    if (errors.length > 0 || targets.length !== 1) {
-      area.innerHTML = `<div class="pattern-status status-error">${errors[0] || 'Enter exactly 9 letters (W/Y/R/O/B/G).'}</div>`;
-      return;
-    }
-    const target = targets[0];
-    const targetFace = target.cubeGrid[1][1];
-    let result;
-    try {
-      result = solveForFace(solvedStateString(), targetFace, target.cubeGrid);
-    } catch (e) {
-      result = { success: false, error: `Unexpected error: ${e.message}` };
-    }
+    const result = correctPlacementTarget(i, raw);
     if (!result.success) {
       area.innerHTML = `<div class="pattern-status status-error">${result.error}</div>`;
       return;
     }
-    planState.placements[i] = {
-      targetLineNum: p.targetLineNum,
-      mosaicPattern: target.mosaicPattern,
-      type: 'solve',
-      sourceLabel: 'fresh solved cube (manual fix)',
-      face: targetFace,
-      rotation: 0,
-      moves: result.moves,
-      moveCount: result.moveCount,
-      startStr: solvedStateString(),
-      finalStr: result.finalStr,
-      placed: false, // re-solved -- if the old version was already marked placed, that's now stale/wrong
-      verified: false, // and any earlier verification of the old pattern no longer applies either
-      flagged: false,
-    };
-    appState.solveLog.push({ source: 'pattern', label: `target line ${p.targetLineNum} (manual fix)`, resultStr: result.finalStr });
-    if (planState.status === 'done') savePlanRunProgress(planState); // keep any persisted copy in sync, in case it's later resumed/inspected
     renderPlanResult();
   };
 }
@@ -7034,6 +7069,7 @@ function buildFreeMatchHuntingListHtml(planState) {
 }
 
 function sourceLabelDisplay(p) {
+  if (p.setAside) return 'the cube you set aside for this spot';
   const loc = p.originalLocation;
   const whereText = loc
     ? (loc.boardLabel ? `board ${loc.boardLabel}, row ${loc.row}, col ${loc.col}` : `row ${loc.row}, col ${loc.col}`)
@@ -7412,10 +7448,38 @@ function handleCancelPlan() {
 // file you'd paste into pattern mode's "Input color pattern" starting-
 // state box for a FUTURE mosaic project.
 function exportSolveLogText() {
-  return appState.solveLog.map(entry => entry.resultStr).join('\n') + (appState.solveLog.length ? '\n' : '');
+  const entries = logEntriesForSaving();
+  return entries.map(entry => entry.resultStr).join('\n') + (entries.length ? '\n' : '');
+}
+
+// Which cube states are safe to reuse later. In a paint-as-you-go plan, a
+// cube not yet placed has only a predicted final state: it may never have
+// been painted, or its turns may not have been made. Leaving those out
+// means a mosaic saved early can't hand a later plan wrong cube states.
+function logEntriesForSaving() {
+  const plan = appState.patternPlanState;
+  if (!plan || !plan.paintAsYouGo) return appState.solveLog;
+  const placedLines = new Set(plan.placements.filter(p => p.placed).map(p => p.targetLineNum));
+  return appState.solveLog.filter(e => placedLines.has(e.targetLineNum));
+}
+
+// The message to show before saving leaves cubes out, or null if none are.
+function partialSaveWarning() {
+  const plan = appState.patternPlanState;
+  if (!plan || !plan.paintAsYouGo) return null;
+  const placed = plan.placements.filter(p => p.placed).length;
+  if (placed === plan.placements.length) return null;
+  return `Only ${placed} of ${plan.placements.length} cubes are marked placed so far. Just those ${placed} will be saved, because the others' final states aren't known yet.\n\nSaving now is fine as a checkpoint, but save again after the last cube so the mosaic is complete. Continue?`;
+}
+
+function confirmPartialSave() {
+  const warning = partialSaveWarning();
+  if (!warning) return true;
+  return typeof confirm !== 'function' || confirm(warning);
 }
 
 function handleExportSolveLog() {
+  if (!confirmPartialSave()) return;
   const text = exportSolveLogText();
   if (!text.trim()) return;
   const blob = new Blob([text], { type: 'text/plain' });
@@ -7491,6 +7555,110 @@ function restoreSavedExportFromBackupJson(jsonText) {
   return { ok: saved, finalName };
 }
 
+// Progress backups: browser storage is the only place a plan's progress
+// lives, so one cleared browser could cost days of painting. This file
+// holds the whole plan (painted states, placed checkmarks and all) and
+// restores through the same "Restore from backup file" button as a saved
+// mosaic, told apart by its `kind`.
+const PLAN_BACKUP_KIND = 'cube-face-solver-plan-backup';
+const BACKUP_REMINDER_EVERY = 100; // placed cubes between reminders
+
+function buildPlanBackupJson(planState) {
+  const { solveCache, _saveVersion, ...plan } = planState;
+  return JSON.stringify({ kind: PLAN_BACKUP_KIND, version: 1, savedAt: new Date().toISOString(), plan });
+}
+
+function isPlanBackupJson(jsonText) {
+  try {
+    return JSON.parse(jsonText).kind === PLAN_BACKUP_KIND;
+  } catch (e) {
+    return false;
+  }
+}
+
+function backupReminderDue(planState) {
+  const placed = planState.placements.filter(p => p.placed).length;
+  return placed - (planState.lastBackupPlacedCount || 0) >= BACKUP_REMINDER_EVERY;
+}
+
+function downloadPlanBackup(planState) {
+  const placed = planState.placements.filter(p => p.placed).length;
+  planState.lastBackupPlacedCount = placed;
+  savePlanRunProgress(planState);
+  const blob = new Blob([buildPlanBackupJson(planState)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `mosaic_progress_${placed}_of_${planState.placements.length}_${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// Fills a reminder slot in the walkthrough, if a backup is due. Downloading
+// has to come from a click, since browsers limit unprompted downloads.
+function renderBackupReminder(slot, planState) {
+  if (!slot) return;
+  if (!backupReminderDue(planState)) { slot.innerHTML = ''; return; }
+  const placed = planState.placements.filter(p => p.placed).length;
+  slot.innerHTML = `<div class="backup-reminder"><span>${placed} cubes placed. Your progress is only in this browser, so it's a good time to back it up.</span><button type="button" class="secondary-btn">Download backup</button></div>`;
+  slot.querySelector('button').onclick = (e) => {
+    e.currentTarget.blur(); // so Enter and the arrow keys go back to the walkthrough
+    downloadPlanBackup(planState);
+    slot.innerHTML = '';
+  };
+}
+
+// Puts a saved or restored plan back on screen, with everything that isn't
+// stored on the plan itself rebuilt from it.
+function adoptSavedPlan(plan) {
+  appState.patternPlanState = plan;
+  mosaicCongratsUiMode = null;
+  mosaicCongratsPlacementIndex = null;
+  appState.patternTargetInput = plan.targetsInput || '';
+  if (plan.mosaicWidth) appState.patternMosaicWidth = plan.mosaicWidth;
+  if (plan.sectionWidth) appState.patternSectionWidth = plan.sectionWidth;
+  if (plan.sectionHeight) appState.patternSectionHeight = plan.sectionHeight;
+  if (plan.sectionFirstHeight != null) appState.patternSectionFirstHeight = plan.sectionFirstHeight;
+  appState.patternBlockOrder = !!plan.blockOrder;
+  if (plan.boardWidth) appState.patternBoardWidth = plan.boardWidth;
+  if (plan.boardHeight) appState.patternBoardHeight = plan.boardHeight;
+  if (plan.paintAsYouGo && !appState.patternStartRows.some(row => row.type === 'paint')) {
+    appState.patternStartRows[0].type = 'paint';
+  }
+  // solveLog only lives in memory, but it's what "Save this mosaic's
+  // pattern" saves -- without this, finishing a mosaic after any page
+  // reload would save only the cubes re-solved since that reload.
+  appState.solveLog = [];
+  logNewPlacements(plan, 0);
+}
+
+// Checks everything before touching the current plan, so a damaged file
+// can't replace good progress.
+function restorePlanFromBackupJson(jsonText) {
+  let parsed;
+  try {
+    parsed = JSON.parse(jsonText);
+  } catch (e) {
+    return { ok: false, error: 'That file is not valid JSON.' };
+  }
+  const plan = parsed && parsed.plan;
+  if (!parsed || parsed.kind !== PLAN_BACKUP_KIND || !plan || !Array.isArray(plan.placements) || plan.placements.length === 0 || typeof plan.targetsInput !== 'string') {
+    return { ok: false, error: "That file doesn't look like a mosaic progress backup." };
+  }
+  const isLegalState = s => typeof s === 'string' && s.length === 54 && [...s].every(ch => FACE_LETTERS.has(ch)) && validateCubeState(s).ok;
+  const damaged = plan.placements.find(p => !p || !/^[WYROBG]{9}$/.test(p.mosaicPattern) || !isLegalState(p.startStr) || !isLegalState(p.finalStr));
+  if (damaged) return { ok: false, error: 'That backup is damaged, so your current progress was left as it is.' };
+
+  plan.status = 'done';
+  plan.solveQueue = [];
+  adoptSavedPlan(plan);
+  clearPlanRunProgress();
+  const stored = savePlanRunProgress(plan);
+  return { ok: true, stored, placed: plan.placements.filter(p => p.placed).length, total: plan.placements.length };
+}
+
 // Downloads a SPECIFIC saved export's cube states as a portable .txt
 // backup, reflecting its CURRENT contents right now -- unlike
 // exportSolveLogText() above, which only ever captures whatever's in
@@ -7524,6 +7692,7 @@ function downloadSavedExportAsText(name) {
 // saved mosaic's pattern" picker for a future mosaic.
 function handleSaveAsNamedExport() {
   if (appState.solveLog.length === 0) return;
+  if (!confirmPartialSave()) return;
   const defaultName = `Mosaic ${new Date().toLocaleDateString()}`;
   const name = (typeof prompt === 'function' ? prompt('Name this saved export:', defaultName) : defaultName);
   if (!name) return;
@@ -7932,6 +8101,9 @@ function createCubeViewer(canvasContainer, startStr, moveString, options = {}) {
   window.addEventListener('mouseup', onPointerUp);
   window.addEventListener('touchend', onPointerUp);
 
+  let stickerMarker = null;
+  const stickerMarkerMat = new THREE.MeshBasicMaterial({ color: 0xe532c8, side: THREE.DoubleSide });
+
   // --- optional tap-a-sticker picking (a tap, not a drag) ---
   let pickStart = null;
   function onPickDown(e) { pickStart = { x: e.clientX, y: e.clientY }; }
@@ -8036,6 +8208,37 @@ function createCubeViewer(canvasContainer, startStr, moveString, options = {}) {
     setState(str) {
       cubelets = cube3dBuildModel(str);
       rebuildAllMeshes();
+      if (stickerMarker) cubeletGroup.add(stickerMarker); // the rebuild clears the group
+      render();
+    },
+    // Outlines one sticker (a 0-53 state index), or none for null.
+    setStickerMarker(index) {
+      if (stickerMarker) { cubeletGroup.remove(stickerMarker); stickerMarker.geometry.dispose(); stickerMarker = null; }
+      if (index !== null) {
+        const face = FACE_ORDER[Math.floor(index / 9)];
+        const k = index % 9;
+        const cell = CUBE3D_FACE_FNS[face](Math.floor(k / 3), k % 3);
+        const dir = CUBE3D_FACE_DIR[face];
+        const outer = 0.45, inner = 0.34;
+        const shape = new THREE.Shape([[-outer, -outer], [outer, -outer], [outer, outer], [-outer, outer]].map(([x, y]) => new THREE.Vector2(x, y)));
+        shape.holes.push(new THREE.Path([[-inner, -inner], [inner, -inner], [inner, inner], [-inner, inner]].map(([x, y]) => new THREE.Vector2(x, y))));
+        stickerMarker = new THREE.Mesh(new THREE.ShapeGeometry(shape), stickerMarkerMat);
+        const lift = 0.49; // just above the sticker's surface
+        stickerMarker.position.set(cell.x + dir.x * lift, cell.y + dir.y * lift, cell.z + dir.z * lift);
+        if (face === 'U') stickerMarker.rotation.x = -Math.PI / 2;
+        if (face === 'D') stickerMarker.rotation.x = Math.PI / 2;
+        if (face === 'R') stickerMarker.rotation.y = Math.PI / 2;
+        if (face === 'L') stickerMarker.rotation.y = -Math.PI / 2;
+        if (face === 'B') stickerMarker.rotation.y = Math.PI;
+        cubeletGroup.add(stickerMarker);
+      }
+      render();
+    },
+    // Snaps the view so this face is in clear sight.
+    showFace(face) {
+      viewRotY = { U: 0, F: 0, R: 0, D: 0, L: Math.PI / 2, B: Math.PI }[face];
+      viewRotX = face === 'D' ? -1.2 : 0;
+      applyViewRotation();
       render();
     },
     // Snaps the view a quarter-turn around the cube, keeping the top up.
@@ -8086,6 +8289,8 @@ function createCubeViewer(canvasContainer, startStr, moveString, options = {}) {
       window.removeEventListener('mouseup', onPointerUp);
       window.removeEventListener('touchend', onPointerUp);
       clearGuideArrows();
+      if (stickerMarker) stickerMarker.geometry.dispose();
+      stickerMarkerMat.dispose();
       [guideArrowMat, guideOutlineMat, guideBadgeMat, guideBadgeTexture, stickerOutlineTexture].forEach(item => item.dispose());
       for (const mesh of meshByCubelet.values()) disposeMesh(mesh);
       renderer.dispose();
@@ -8521,6 +8726,7 @@ function applyCubeStartToPlacement(placementIndex, startStr, source) {
   const planState = appState.patternPlanState;
   const p = planState.placements[placementIndex];
   const plannedFromSolved = !p.startSource && p.sourceLabel === 'fresh solved cube';
+  p.setAside = false;
   if (source === 'solved' && plannedFromSolved) {
     p.startSource = 'solved';
   } else {
@@ -8544,13 +8750,43 @@ function applyCubeStartToPlacement(placementIndex, startStr, source) {
     markPlaced(p, false);
     p.verified = false;
     p.flagged = false;
-    const logEntry = appState.solveLog.find(e => e.targetLineNum === p.targetLineNum);
-    if (logEntry) logEntry.resultStr = p.finalStr;
-    else appState.solveLog.push({ source: 'pattern', label: `target line ${p.targetLineNum}`, resultStr: p.finalStr, targetLineNum: p.targetLineNum });
+    syncPlacementToSolveLog(p);
   }
   if (planState.status === 'done') savePlanRunProgress(planState);
   renderPlanResult();
   return { success: true };
+}
+
+// The order typed colors fill the stickers in, skipping the fixed centers.
+// It follows how you'd naturally work around a cube in your hands: top,
+// then the four sides going around, then the bottom. Each face reads like
+// a page, matching that face on the flat map.
+const PAINT_ENTRY_ORDER = ['U', 'F', 'R', 'B', 'L', 'D'].flatMap(face =>
+  [0, 1, 2, 3, 5, 6, 7, 8].map(k => FACE_ORDER.indexOf(face) * 9 + k));
+
+// Finds another unassigned spot this exact cube already fits with no turns,
+// in walkthrough order. Returns null if there isn't one, or if the cube also
+// fits the spot it's being painted for, since then there's nothing to gain.
+function findFreeSpotForCube(cubeStr, planState, currentIndex) {
+  const shown = new Set(allFaceOrientations(cubeStr).map(o => o.pattern));
+  const fits = p => shown.has([...p.mosaicPattern].map(ch => MOSAIC_CODE_TO_CUBE_LETTER[ch]).join(''));
+  if (fits(planState.placements[currentIndex])) return null;
+  const spot = cubeViewerNavigableIndices(planState).find(i =>
+    i !== currentIndex && placementNeedsStartChoice(planState.placements[i], planState) && fits(planState.placements[i]));
+  return spot === undefined ? null : spot;
+}
+
+// Assigns a cube that's in hand to a later spot it already fits. It waits
+// there, already known, so that spot doesn't get painted again.
+function setCubeAsideForPlacement(spotIndex, cubeStr, source) {
+  const result = applyCubeStartToPlacement(spotIndex, cubeStr, source);
+  if (result.success) {
+    const planState = appState.patternPlanState;
+    planState.placements[spotIndex].setAside = true;
+    if (planState.status === 'done') savePlanRunProgress(planState);
+    renderPlanResult();
+  }
+  return result;
 }
 
 function openCubePainter(placementIndex) {
@@ -8596,10 +8832,11 @@ function openCubePainter(placementIndex) {
       <div class="cube-viewer-header">
         <div>
           <h3>Paint this cube's current state</h3>
-          <div style="font-size:0.72rem; color:var(--text-dim); margin-top:2px;">Hold your cube with the <strong>green</strong> center on top and the <strong>red</strong> center facing you (white on the right). Every sticker starts white, so only paint the ones that aren't.</div>
+          <div style="font-size:0.72rem; color:var(--text-dim); margin-top:2px;">Hold your cube with the <strong>green</strong> center on top and the <strong>red</strong> center facing you (white on the right). Every sticker starts white. Type each sticker's color in turn, following the highlight, or tap stickers to paint them.</div>
         </div>
         <button class="cube-viewer-close" id="cubePainterCloseBtn" aria-label="Cancel">&times;</button>
       </div>
+      <div id="paintBackupSlot"></div>
       <div class="paint-context">
         <div class="paint-target-tile" role="img" aria-label="Target pattern ${placement.mosaicPattern}">${tiles}</div>
         <div>
@@ -8621,14 +8858,16 @@ function openCubePainter(placementIndex) {
           <div class="paint-net-row">${faceHtml('D')}</div>
         </div>
       </div>
+      <div id="paintCursorLabel"></div>
       <div id="paintMsg" role="status" aria-live="polite"></div>
+      <div id="paintMatchOffer" hidden></div>
       <div class="cube-viewer-controls">
         <button type="button" id="paintPrevCubeBtn">&larr; Prev cube</button>
         <button type="button" id="paintResetBtn">Clear</button>
         <button type="button" id="paintAlreadySolvedBtn">Already solved</button>
         <button type="button" id="paintSolveBtn" style="background:var(--accent); color:var(--on-accent); font-weight:700;">Get the turns &rarr;</button>
       </div>
-      <div class="cube-viewer-hint">Keys: W Y R O B G pick a color &middot; arrows turn the view &middot; Enter gets the turns &middot; S already solved &middot; [ prev cube</div>
+      <div class="cube-viewer-hint">Type W Y R O B G for each sticker in turn &middot; Backspace goes back &middot; Enter gets the turns &middot; S already solved &middot; arrows turn the view &middot; [ prev cube</div>
     </div>`;
   document.body.appendChild(overlay);
   overlay.onclick = (e) => { if (e.target === overlay) closeCubePainter(); };
@@ -8663,18 +8902,57 @@ function openCubePainter(placementIndex) {
     activeCode = code;
     overlay.querySelectorAll('.paint-swatch').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.code === code)));
   };
-  const paintSticker = (i) => {
-    if (i % 9 === 4 || paint[i] === activeCode) return;
-    paint[i] = activeCode;
-    cellEls[i].style.background = hexOf(activeCode);
+  const setSticker = (i, code) => {
+    if (paint[i] === code) return;
+    paint[i] = code;
+    cellEls[i].style.background = hexOf(code);
     setFlags([]);
     if (painterViewer) painterViewer.setState(toCubeString());
     updateCounts();
   };
 
+  // The cursor is the next sticker a typed color goes to. The 3D view follows
+  // it around the cube, so the sticker being asked about is always in view.
+  let cursorPos = 0;
+  let cursorFace = 'U';
+  const showCursor = () => {
+    overlay.querySelectorAll('.paint-cursor').forEach(c => c.classList.remove('paint-cursor'));
+    const label = overlay.querySelector('#paintCursorLabel');
+    if (cursorPos >= PAINT_ENTRY_ORDER.length) {
+      if (painterViewer) painterViewer.setStickerMarker(null);
+      label.textContent = 'All 48 stickers are in. Press Enter for the turns.';
+      return;
+    }
+    const i = PAINT_ENTRY_ORDER[cursorPos];
+    const face = FACE_ORDER[Math.floor(i / 9)];
+    const k = i % 9;
+    cellEls[i].classList.add('paint-cursor');
+    if (painterViewer) painterViewer.setStickerMarker(i);
+    if (face !== cursorFace) {
+      cursorFace = face;
+      if (painterViewer) painterViewer.showFace(face);
+      syncTiltBtn(face === 'D');
+    }
+    label.textContent = `Next sticker: ${SIDE_WORDS[face]} face, row ${Math.floor(k / 3) + 1}, column ${k % 3 + 1}`;
+  };
+  const typeColor = (code) => {
+    setActive(code);
+    if (cursorPos >= PAINT_ENTRY_ORDER.length) return;
+    setSticker(PAINT_ENTRY_ORDER[cursorPos], code);
+    cursorPos++;
+    showCursor();
+  };
+  const paintSticker = (i) => {
+    if (i % 9 === 4) return;
+    setSticker(i, activeCode);
+    cursorPos = PAINT_ENTRY_ORDER.indexOf(i) + 1; // typing carries on from whatever was just tapped
+    showCursor();
+  };
+
   overlay.querySelectorAll('.paint-swatch').forEach(b => { b.onclick = () => setActive(b.dataset.code); });
   setActive(activeCode);
   updateCounts();
+  renderBackupReminder(overlay.querySelector('#paintBackupSlot'), planState);
 
   // Press-and-drag paints every cell the pointer crosses on the flat map.
   painterEventsAbort = new AbortController();
@@ -8706,17 +8984,21 @@ function openCubePainter(placementIndex) {
 
   let viewingBottom = false;
   const tiltBtn = overlay.querySelector('#paintViewTilt');
-  const setTilt = (bottom) => {
+  function syncTiltBtn(bottom) {
     viewingBottom = bottom;
-    if (painterViewer) painterViewer.tiltView(bottom);
     tiltBtn.innerHTML = bottom ? '&#8963;' : '&#8964;';
     tiltBtn.setAttribute('aria-label', bottom ? 'Tilt to see the top' : 'Tilt to see the bottom');
+  }
+  const setTilt = (bottom) => {
+    if (painterViewer) painterViewer.tiltView(bottom);
+    syncTiltBtn(bottom);
   };
+  showCursor();
   overlay.querySelector('#paintViewLeft').onclick = () => { if (painterViewer) painterViewer.turnView(-1); };
   overlay.querySelector('#paintViewRight').onclick = () => { if (painterViewer) painterViewer.turnView(1); };
   tiltBtn.onclick = () => setTilt(!viewingBottom);
 
-  overlay.querySelector('#paintResetBtn').onclick = () => {
+  const clearPaint = () => {
     for (let i = 0; i < 54; i++) {
       if (i % 9 === 4) continue;
       paint[i] = 'W';
@@ -8725,7 +9007,13 @@ function openCubePainter(placementIndex) {
     setFlags([]);
     if (painterViewer) painterViewer.setState(toCubeString());
     updateCounts();
+    cursorPos = 0;
+    cursorFace = 'U';
+    if (painterViewer) painterViewer.showFace('U');
+    syncTiltBtn(false);
+    showCursor();
   };
+  overlay.querySelector('#paintResetBtn').onclick = clearPaint;
 
   // Solving can take a moment; yield once first so the button's "working"
   // text actually reaches the screen before the tab gets busy.
@@ -8745,6 +9033,50 @@ function openCubePainter(placementIndex) {
     }, 30);
   };
 
+  const useCubeHere = (btn, str, source) => {
+    runAfterPaint(btn, () => {
+      const result = applyCubeStartToPlacement(placementIndex, str, source);
+      if (!result.success) return result;
+      closeCubePainter();
+      openCubeViewer(placementIndex);
+      return result;
+    });
+  };
+
+  // If this cube already fits another spot, offer that before spending turns
+  // on it here. Only exact matches count: from any starting state the solver
+  // lands around 20 turns, so another spot being "closer" would save little.
+  const offerEl = overlay.querySelector('#paintMatchOffer');
+  const closeOffer = () => { offerEl.hidden = true; offerEl.innerHTML = ''; };
+  const startFromCube = (btn, str, source) => {
+    const spot = findFreeSpotForCube(str, planState, placementIndex);
+    if (spot === null) { useCubeHere(btn, str, source); return; }
+    const target = planState.placements[spot];
+    const spotPos = gridPositionForLine(target.targetLineNum, planState.mosaicWidth);
+    const where = spotPos ? `row ${spotPos.row}, col ${spotPos.col}` : `line ${target.targetLineNum}`;
+    const spotTiles = [...target.mosaicPattern].map(code => `<div style="background:${hexOf(code)};"></div>`).join('');
+    offerEl.innerHTML = `
+      <div class="paint-target-tile" role="img" aria-label="Pattern ${target.mosaicPattern}">${spotTiles}</div>
+      <div class="paint-offer-body">
+        <div><strong>This cube fits ${where} with no turns.</strong> Using it there saves about 20 turns.</div>
+        <div class="paint-offer-actions">
+          <button type="button" class="secondary-btn" id="paintOfferAside">Set it aside for ${where}</button>
+          <button type="button" class="secondary-btn" id="paintOfferHere">Use it here anyway</button>
+        </div>
+      </div>`;
+    offerEl.hidden = false;
+    const asideBtn = offerEl.querySelector('#paintOfferAside');
+    offerEl.querySelector('#paintOfferHere').onclick = () => { closeOffer(); useCubeHere(btn, str, source); };
+    asideBtn.onclick = () => {
+      const result = setCubeAsideForPlacement(spot, str, source);
+      closeOffer();
+      if (!result.success) { msg(result.error || 'Could not assign this cube there.', true); return; }
+      clearPaint();
+      msg(`Set aside for ${where}. Now pick up another cube for this spot.`);
+    };
+    asideBtn.focus();
+  };
+
   const solveBtn = overlay.querySelector('#paintSolveBtn');
   solveBtn.onclick = () => {
     if (solveBtn.disabled) return;
@@ -8755,25 +9087,13 @@ function openCubePainter(placementIndex) {
       msg(explainCubeProblem(check), true);
       return;
     }
-    runAfterPaint(solveBtn, () => {
-      const result = applyCubeStartToPlacement(placementIndex, str, 'painted');
-      if (!result.success) return result;
-      closeCubePainter();
-      openCubeViewer(placementIndex);
-      return result;
-    });
+    startFromCube(solveBtn, str, 'painted');
   };
 
   const alreadySolvedBtn = overlay.querySelector('#paintAlreadySolvedBtn');
   alreadySolvedBtn.onclick = () => {
     if (alreadySolvedBtn.disabled) return;
-    runAfterPaint(alreadySolvedBtn, () => {
-      const result = applyCubeStartToPlacement(placementIndex, solvedStateString(), 'solved');
-      if (!result.success) return result;
-      closeCubePainter();
-      openCubeViewer(placementIndex);
-      return result;
-    });
+    startFromCube(alreadySolvedBtn, solvedStateString(), 'solved');
   };
 
   const prevCubeBtn = overlay.querySelector('#paintPrevCubeBtn');
@@ -8798,6 +9118,15 @@ function openCubePainter(placementIndex) {
       solveBtn.click();
       return;
     }
+    if (!offerEl.hidden) return; // the offer needs an answer before painting carries on
+    if (e.key === 'Backspace') {
+      e.preventDefault();
+      if (cursorPos === 0) return;
+      cursorPos--;
+      setSticker(PAINT_ENTRY_ORDER[cursorPos], 'W');
+      showCursor();
+      return;
+    }
     if (e.key === 'ArrowLeft') { e.preventDefault(); if (painterViewer) painterViewer.turnView(-1); return; }
     if (e.key === 'ArrowRight') { e.preventDefault(); if (painterViewer) painterViewer.turnView(1); return; }
     if (e.key === 'ArrowDown') { e.preventDefault(); setTilt(true); return; }
@@ -8805,7 +9134,7 @@ function openCubePainter(placementIndex) {
     if (e.key === '[') { e.preventDefault(); goToPrevCube(); return; }
     const key = e.key.toUpperCase();
     if (key === 'S') { e.preventDefault(); alreadySolvedBtn.click(); return; }
-    if (VALID_CODES.has(key)) { e.preventDefault(); setActive(key); }
+    if (VALID_CODES.has(key)) { e.preventDefault(); typeColor(key); }
   };
   document.addEventListener('keydown', painterKeydownHandler);
 }
@@ -8946,7 +9275,7 @@ function openCubeViewer(placementIndex) {
   overlay.className = 'cube-viewer-overlay';
   overlay.id = 'cubeViewerOverlay';
   overlay.innerHTML = `
-    <div class="cube-viewer-modal" role="dialog" aria-modal="true" aria-labelledby="cubeViewerTitle" tabindex="-1">
+    <div class="cube-viewer-modal cube-viewer-wide" role="dialog" aria-modal="true" aria-labelledby="cubeViewerTitle" tabindex="-1">
       <div class="cube-viewer-header">
         <div>
           <h3 id="cubeViewerTitle">${placement.mosaicPattern} &mdash; show ${FACE_FULL_NAMES[placement.face]} face</h3>
@@ -8954,7 +9283,20 @@ function openCubeViewer(placementIndex) {
         </div>
         <button class="cube-viewer-close" id="cubeViewerCloseBtn" aria-label="Close 3D viewer">&times;</button>
       </div>
-      ${minimapHtml}
+      <div id="viewerBackupSlot"></div>
+      ${placement.setAside && !placement.placed ? '<div class="backup-reminder"><span>Use the cube you set aside for this spot.</span></div>' : ''}
+      <div class="cube-viewer-body">
+      <div class="cube-viewer-col-cube">
+        <div class="cube-orient-wrap">
+          ${orientLabel('top', 'U')}
+          ${orientLabel('right', 'R')}
+          ${orientLabel('bottom', 'D')}
+          ${orientLabel('left', 'L')}
+          <div class="cube-viewer-canvas-wrap" id="cubeViewerCanvasWrap"></div>
+        </div>
+        ${minimapHtml}
+      </div>
+      <div class="cube-viewer-col-steps">
       ${navPos >= 0 ? `<div style="padding:0 16px 10px;">
         <div style="display:flex; justify-content:space-between; font-size:0.72rem; color:var(--text-dim); margin-bottom:4px;">
           <span>${blockInfo
@@ -8970,21 +9312,12 @@ function openCubeViewer(placementIndex) {
             : 100 * (navPos + 1) / Math.max(1, navigable.length)).toFixed(1)}%;"></div>
         </div>
       </div>` : `<div style="padding:2px 16px 10px; font-size:0.72rem; color:var(--text-dim);">FREE match &mdash; no moves needed. Show the correct face directly.</div>`}
-      <div class="cube-viewer-main-row">
-        <div class="cube-orient-wrap">
-          ${orientLabel('top', 'U')}
-          ${orientLabel('right', 'R')}
-          ${orientLabel('bottom', 'D')}
-          ${orientLabel('left', 'L')}
-          <div class="cube-viewer-canvas-wrap" id="cubeViewerCanvasWrap"></div>
-        </div>
-        <div id="cubeViewerSnapshots"></div>
-      </div>
-      <div id="cubeViewerFinalStep" aria-live="polite"></div>
-      <div style="display:flex; align-items:center; gap:8px; padding:10px 16px 4px;">
+      <div style="display:flex; align-items:center; gap:8px; padding:4px 16px;">
         <div class="cube-viewer-step-label" id="cubeViewerStepLabel" style="flex:1; padding:0;"></div>
         <button id="cubeViewerLargeTextBtn" style="flex-shrink:0; padding:2px 8px; border-radius:5px; font-size:0.68rem; font-weight:700; cursor:pointer; border:1px solid ${viewerLargeText ? 'var(--accent)' : 'var(--border)'}; background:${viewerLargeText ? 'var(--accent)' : 'var(--control)'}; color:${viewerLargeText ? 'var(--on-accent)' : 'var(--text)'};" title="Toggle large move text">A+</button>
       </div>
+      <div id="cubeViewerSnapshots"></div>
+      <div id="cubeViewerFinalStep" aria-live="polite"></div>
       <div class="cube-viewer-moves-strip" id="cubeViewerMovesStrip" tabindex="0" role="group" aria-label="Full move sequence, scrollable"></div>
       <div style="padding:2px 16px 0;">
         <input type="range" id="cubeViewerScrubber" min="0" max="0" value="0" style="width:100%; accent-color:var(--accent); cursor:pointer;" aria-label="Jump to move step">
@@ -9011,11 +9344,14 @@ function openCubeViewer(placementIndex) {
       <div style="text-align:center; padding:2px 16px 0;"><button type="button" id="cubeViewerPaintBtn" class="reset-link" style="font-size:0.7rem; color:var(--accent-text);">&#127912; Cube not in the expected state? Paint its actual state</button></div>
       <div style="text-align:center; padding:4px 16px 2px; font-size:0.78rem; color:var(--text-dim);">When done &rarr; show <strong style="color:var(--text);">${FACE_FULL_NAMES[placement.face]}</strong> face${placement.rotation ? `, rotated ${placement.rotation}&deg;` : ''}</div>
       <div class="cube-viewer-hint">Drag to rotate &middot; &#8592; &#8594; moves &middot; Space play/pause &middot; [ ] prev/next cube &middot; F flip</div>
+      </div>
+      </div>
     </div>
   `;
   document.body.appendChild(overlay);
   overlay.onclick = (e) => { if (e.target === overlay) closeCubeViewer(); };
   document.getElementById('cubeViewerCloseBtn').onclick = closeCubeViewer;
+  renderBackupReminder(document.getElementById('viewerBackupSlot'), planState);
   const cubeViewerPaintBtn = document.getElementById('cubeViewerPaintBtn');
   if (cubeViewerPaintBtn) cubeViewerPaintBtn.onclick = () => openCubePainter(placementIndex);
   document.getElementById('cubeViewerRestartBtn').onclick = () => {
@@ -9415,26 +9751,7 @@ window.addEventListener('load', () => {
     // returns to exactly where they left off (checked boxes and all).
     // Running plans are handled separately via the Resume button in renderPlanResult.
     const savedPlan = loadPlanRunProgress();
-    if (savedPlan && savedPlan.status === 'done') {
-      appState.patternPlanState = savedPlan;
-      mosaicCongratsUiMode = null;
-      mosaicCongratsPlacementIndex = null;
-      appState.patternTargetInput = savedPlan.targetsInput || '';
-      if (savedPlan.mosaicWidth) appState.patternMosaicWidth = savedPlan.mosaicWidth;
-      if (savedPlan.sectionWidth) appState.patternSectionWidth = savedPlan.sectionWidth;
-      if (savedPlan.sectionHeight) appState.patternSectionHeight = savedPlan.sectionHeight;
-      if (savedPlan.sectionFirstHeight != null) appState.patternSectionFirstHeight = savedPlan.sectionFirstHeight;
-      appState.patternBlockOrder = !!savedPlan.blockOrder;
-      if (savedPlan.boardWidth) appState.patternBoardWidth = savedPlan.boardWidth;
-      if (savedPlan.boardHeight) appState.patternBoardHeight = savedPlan.boardHeight;
-      if (savedPlan.paintAsYouGo && !appState.patternStartRows.some(row => row.type === 'paint')) {
-        appState.patternStartRows[0].type = 'paint';
-      }
-      // solveLog only lives in memory, but it's what "Save this mosaic's
-      // pattern" saves -- without this, finishing a mosaic after any page
-      // reload would save only the cubes re-solved since that reload.
-      logNewPlacements(savedPlan, 0);
-    }
+    if (savedPlan && savedPlan.status === 'done') adoptSavedPlan(savedPlan);
     render();
   }, 50);
 });
