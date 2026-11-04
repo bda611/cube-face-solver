@@ -4433,11 +4433,14 @@ function originalLocationForSavedExportLine(entry, idx) {
   }
   // On a board, the row and column have to be the ones on that board.
   const onBoard = !!boardLabel;
+  const row = onBoard ? (pos.row - 1) % geo.boardHeight + 1 : pos.row;
+  const col = onBoard ? (pos.col - 1) % geo.boardWidth + 1 : pos.col;
   return {
     mosaicName: entry.name,
-    row: onBoard ? (pos.row - 1) % geo.boardHeight + 1 : pos.row,
-    col: onBoard ? (pos.col - 1) % geo.boardWidth + 1 : pos.col,
+    row,
+    col,
     boardLabel,
+    spot: onBoard ? boardSpotNumber(row, col, geo.boardWidth, geo.boardHeight) : null,
   };
 }
 
@@ -5772,6 +5775,14 @@ function blockBoundsForGroup(g, planState) {
   return { rowFrom, rowTo, colFrom, colTo };
 }
 
+// The number printed at a spot on a physical board: numbering starts at the
+// board's top-left and reads like a page, so on a 10 x 10 board the top row
+// is 01-10 and the bottom row is 91-100. Rows here count up from the bottom,
+// as they do everywhere else, which is why the row has to be flipped.
+function boardSpotNumber(boardRow, boardCol, boardWidth, boardHeight) {
+  return String((boardHeight - boardRow) * boardWidth + boardCol).padStart(2, '0');
+}
+
 // Where a cube goes, in the terms of whatever is in your hands: in board-by-
 // board plans that's the board and the row and column on it, since a row
 // number for the whole mosaic can't be found on a single board.
@@ -5782,7 +5793,9 @@ function spotLabel(lineNum, planState) {
   const g = planBlockOrderActive(planState) ? blockGroupForPlacement({ targetLineNum: lineNum }, planState) : null;
   if (!g) return `row ${pos.row}, col ${pos.col}`;
   const bounds = blockBoundsForGroup(g, planState);
-  return `board ${blockLabelForGroup(g)}, row ${pos.row - bounds.rowFrom + 1}, col ${pos.col - bounds.colFrom + 1}`;
+  const { sW, sH } = planBlockParams(planState);
+  const row = pos.row - bounds.rowFrom + 1, col = pos.col - bounds.colFrom + 1;
+  return `board ${blockLabelForGroup(g)}, spot ${boardSpotNumber(row, col, sW, sH)} (row ${row}, col ${col})`;
 }
 
 // The build order the user physically works in when block mode is on:
@@ -6008,7 +6021,7 @@ function buildFinalPlacementCardHtml(placement, planState) {
     const bRow = pos.row - bounds.rowFrom + 1;
     const bCol = pos.col - bounds.colFrom + 1;
     positionLines = `
-        <div>&#128205; Board <strong>${blockLabelForGroup(blockGroup)}</strong> &mdash; row ${bRow}, col ${bCol} on the board</div>
+        <div>&#128205; Board <strong>${blockLabelForGroup(blockGroup)}</strong>, spot <strong>${boardSpotNumber(bRow, bCol, planBlockParams(planState).sW, planBlockParams(planState).sH)}</strong> &mdash; row ${bRow}, col ${bCol} on the board</div>
         <div style="font-size:0.7rem; color:var(--text-dim);">Mosaic overall: row ${pos.row}, col ${pos.col} &middot; row 1 = bottom, col 1 = left</div>`;
 
     // Current-row strip: every cube across THIS board row, left-to-right,
@@ -7262,7 +7275,7 @@ function sourceLabelDisplay(p) {
   if (p.setAside) return 'the cube you set aside for this spot';
   const loc = p.originalLocation;
   const whereText = loc
-    ? (loc.boardLabel ? `board ${loc.boardLabel}, row ${loc.row}, col ${loc.col}` : `row ${loc.row}, col ${loc.col}`)
+    ? (loc.boardLabel ? `board ${loc.boardLabel}, ${loc.spot ? `spot ${loc.spot} (row ${loc.row}, col ${loc.col})` : `row ${loc.row}, col ${loc.col}`}` : `row ${loc.row}, col ${loc.col}`)
     : null;
 
   if (p.type === 'free' && p.sourceLabel !== 'fresh solved cube') {

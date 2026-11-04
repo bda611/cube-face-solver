@@ -166,11 +166,26 @@ test('boards are named by row letter and place in that row, in build order', () 
 test('a cube\'s spot is given as its board and the row and column on that board', () => {
   const { t } = app;
   const plan = { blockOrder: true, boardWidth: 10, boardHeight: 10, mosaicWidth: 40, totalCount: 2000 };
-  // Whole-mosaic row 16, column 1 is the sixth row of the first board in row B.
-  assert.equal(t.spotLabel(15 * 40 + 1, plan), 'board B1, row 6, col 1');
-  assert.equal(t.spotLabel(1, plan), 'board A1, row 1, col 1');
-  assert.equal(t.spotLabel(2000, plan), 'board E4, row 10, col 10');
-  assert.equal(t.spotLabel(11 * 40 + 25, plan), 'board B3, row 2, col 5');
+  // Whole-mosaic row 16, column 1 is the sixth row up on the first board in row B.
+  assert.equal(t.spotLabel(15 * 40 + 1, plan), 'board B1, spot 41 (row 6, col 1)');
+  assert.equal(t.spotLabel(1, plan), 'board A1, spot 91 (row 1, col 1)');
+  assert.equal(t.spotLabel(2000, plan), 'board E4, spot 10 (row 10, col 10)');
+  assert.equal(t.spotLabel(11 * 40 + 25, plan), 'board B3, spot 85 (row 2, col 5)');
+});
+
+test('board spots run 01-10 along the top row and 91-100 along the bottom', () => {
+  const { t } = app;
+  const spot = (row, col) => t.boardSpotNumber(row, col, 10, 10);
+  assert.equal(spot(10, 1), '01');
+  assert.equal(spot(10, 10), '10');
+  assert.equal(spot(9, 1), '11');
+  assert.equal(spot(1, 1), '91');
+  assert.equal(spot(1, 10), '100');
+  const all = [];
+  for (let row = 1; row <= 10; row++) for (let col = 1; col <= 10; col++) all.push(Number(spot(row, col)));
+  assert.equal(new Set(all).size, 100);
+  assert.equal(Math.min(...all), 1);
+  assert.equal(Math.max(...all), 100);
 });
 
 test('without boards, a spot stays a plain row and column', () => {
@@ -189,6 +204,7 @@ test('a reused cube\'s old location uses the row and column on its board', () =>
   assert.equal(loc.boardLabel, 'B1');
   assert.equal(loc.row, 6);
   assert.equal(loc.col, 1);
+  assert.equal(loc.spot, '41');
 });
 
 test('Ruwix PDF sections keep the names printed on the PDF', () => {
