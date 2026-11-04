@@ -8,16 +8,27 @@
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #161513;
-    --panel: #211f1c;
-    --border: #3a352c;
-    --text: #D9D2C6;
-    --text-dim: #9c9488;
-    --accent: #4A8AF0;
-    --success: #5FA86B;
-    --error: #f87171;
-    --free: #D9B53C;
-    --accent-text: #6FA3F2; /* lightened accent for small text directly on panel backgrounds, where the full accent falls short of AA contrast */
+    color-scheme: light;
+    --bg: #f4f2ee;
+    --panel: #ffffff;
+    --border: #d6d1c7;
+    --text: #23201b;
+    --text-dim: #5f5a51;
+    --accent: #2563c9;
+    --on-accent: #ffffff; /* text and icons on top of --accent or --success */
+    --success: #1e7a36;
+    --success-bg: #e7f4ea;
+    --success-border: #a9d2b3;
+    --error: #c02626;
+    --error-bg: #fbeaea;
+    --error-border: #eab4b4;
+    --free: #8a6a00;
+    --accent-text: #1f56b0; /* slightly darker accent for small text directly on panel backgrounds */
+    --sunken: #f1efe9; /* inputs and inset areas */
+    --control: #f5f3ee; /* secondary buttons */
+    --track: #e3dfd7; /* progress-bar tracks and not-yet-started states */
+    --item: #f7f5f1; /* plan list rows */
+    --stage: #e7ebef; /* behind the 3D cube */
   }
   * { box-sizing: border-box; }
   /* Baseline keyboard-focus indicator (WCAG 2.4.7): applies to every
@@ -33,11 +44,8 @@
     outline-offset: 2px;
   }
   /* Plain links had no color rule and fell back to the browser's
-     default blue (#0000EE), which only contrasts 1.75:1 against
-     --panel (#211f1c) -- well under WCAG AA's 4.5:1 floor for normal
-     text. Reuse the existing --accent blue instead, which already
-     passes (4.84:1) and keeps link color consistent with the rest of
-     the UI's interactive-element color. */
+     default blue. Reuse --accent instead, which keeps link color
+     consistent with the rest of the UI's interactive-element color. */
   /* Visually hidden but still announced by screen readers -- used for
      status updates (e.g. plan-run progress) that have an always-visible
      sighted equivalent elsewhere, so we don't show the text twice. */
@@ -110,7 +118,7 @@
   }
   .step-num {
     background: var(--accent);
-    color: #1a1209;
+    color: var(--on-accent);
     width: 20px; height: 20px;
     border-radius: 50%;
     display: inline-flex;
@@ -127,7 +135,7 @@
     padding: 10px 12px;
     border-radius: 8px;
     border: 1px solid var(--border);
-    background: #1c1a17;
+    background: var(--sunken);
     color: var(--text);
     font-family: 'SF Mono', Consolas, monospace;
     font-size: 0.95rem;
@@ -210,7 +218,7 @@
   }
   .panel-desc .prep-steps li:last-child { margin-bottom: 0; }
   .claude-prompt-box {
-    background: #111;
+    background: var(--sunken);
     border: 1px solid var(--border);
     border-radius: 8px;
     padding: 12px;
@@ -240,7 +248,7 @@
     display: block;
   }
   .swatch:active { transform: scale(0.93); }
-  .swatch.selected { border-color: #fff; box-shadow: 0 0 0 2px var(--accent); }
+  .swatch.selected { border-color: var(--text); box-shadow: 0 0 0 2px var(--accent); }
   .swatch .label {
     position: absolute;
     bottom: -16px; left: 0; right: 0;
@@ -268,7 +276,7 @@
     width: 26px; height: 26px;
     border-radius: 3px;
     cursor: pointer;
-    border: 1px solid rgba(255,255,255,0.15);
+    border: 1px solid rgba(0,0,0,0.2);
     padding: 0;
     display: block;
   }
@@ -294,12 +302,12 @@
     padding: 8px 12px;
     border-radius: 8px;
     border: 1px solid var(--border);
-    background: #2e2e2e;
+    background: var(--control);
     color: var(--text);
     font-size: 0.8rem;
     cursor: pointer;
   }
-  .face-pick-btn.active { background: var(--accent); color: #1a1209; border-color: var(--accent); font-weight: 600; }
+  .face-pick-btn.active { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: 600; }
 
   button.primary {
     width: 100%;
@@ -307,24 +315,24 @@
     border-radius: 10px;
     border: none;
     background: var(--accent);
-    color: #1a1209;
+    color: var(--on-accent);
     font-size: 0.95rem;
     font-weight: 700;
     letter-spacing: 0.01em;
     cursor: pointer;
     margin-top: 4px;
   }
-  button.primary:disabled { background: #444; color: #888; cursor: not-allowed; }
+  button.primary:disabled { background: var(--track); color: var(--text-dim); cursor: not-allowed; }
   button.primary:active:not(:disabled) { transform: scale(0.99); }
 
   .result-box {
     margin-top: 14px;
     padding: 14px;
     border-radius: 10px;
-    background: #1e2a1e;
-    border: 1px solid #2d4a2d;
+    background: var(--success-bg);
+    border: 1px solid var(--success-border);
   }
-  .result-box.error { background: #2a1e1e; border-color: #4a2d2d; }
+  .result-box.error { background: var(--error-bg); border-color: var(--error-border); }
   .result-box .status {
     font-weight: 600;
     font-size: 0.9rem;
@@ -339,7 +347,7 @@
     font-family: 'SF Mono', Monaco, monospace;
     font-size: 1.05rem;
     line-height: 1.8;
-    background: #111;
+    background: var(--sunken);
     padding: 12px;
     border-radius: 8px;
     word-spacing: 4px;
@@ -361,7 +369,7 @@
     padding: 6px 12px;
     border-radius: 6px;
     border: 1px solid var(--border);
-    background: #2e2e2e;
+    background: var(--control);
     color: var(--text);
     font-size: 0.75rem;
     cursor: pointer;
@@ -413,7 +421,7 @@
     padding: 8px 14px;
     border-radius: 8px;
     border: 1px solid var(--border);
-    background: #2e2e2e;
+    background: var(--control);
     color: var(--text);
     font-size: 0.8rem;
     cursor: pointer;
@@ -433,21 +441,21 @@
     padding: 12px;
     font-size: 0.9rem;
     font-weight: 600;
-    background: #182218;
-    border-color: #3d5a3d;
+    background: var(--success-bg);
+    border-color: var(--success-border);
     color: var(--success);
     margin-bottom: 0;
   }
 
   .panel-desc code {
-    background: #111;
+    background: var(--sunken);
     padding: 1px 5px;
     border-radius: 4px;
     font-size: 0.78rem;
   }
 
   .bulk-swatch { width: 10px; height: 10px; border-radius: 1px; }
-  .bulk-swatch.bulk-center { box-shadow: inset 0 0 0 1px rgba(255,255,255,0.4); }
+  .bulk-swatch.bulk-center { box-shadow: inset 0 0 0 1px rgba(0,0,0,0.35); }
 
   textarea.pattern-input {
     font-family: 'SF Mono', Consolas, monospace;
@@ -462,7 +470,7 @@
     padding: 8px 10px;
     border-radius: 8px;
     border: 1px solid var(--border);
-    background: #1c1a17;
+    background: var(--sunken);
     color: var(--text);
     font-size: 0.9rem;
   }
@@ -488,7 +496,7 @@
   .match-stat.free .num { color: var(--success); }
   .match-stat.remaining .num { color: var(--accent-text); }
   .match-stat:not(.free):not(.remaining) .num { color: var(--free); }
-  .board-dashboard { margin: 4px 0 14px; padding: 10px 12px; border:1px solid var(--border); border-radius:10px; background:#141414; }
+  .board-dashboard { margin: 4px 0 14px; padding: 10px 12px; border:1px solid var(--border); border-radius:10px; background:var(--sunken); }
   .board-dash-head { display:flex; justify-content:space-between; flex-wrap:wrap; gap:4px 12px; font-size:0.8rem; margin-bottom:8px; }
   .board-map { display:grid; gap:3px; }
   .board-map-cell { aspect-ratio:1; display:flex; align-items:center; justify-content:center; font-size:0.58rem; font-weight:700; border-radius:3px; cursor:pointer; min-height:20px; user-select:none; }
@@ -507,13 +515,13 @@
     gap: 10px;
     padding: 9px 11px;
     border-radius: 8px;
-    background: #1e2a1e;
-    border: 1px solid #2d4a2d;
+    background: var(--success-bg);
+    border: 1px solid var(--success-border);
     font-size: 0.8rem;
   }
   .match-item .match-badge {
     background: var(--success);
-    color: #000;
+    color: var(--on-accent);
     font-weight: 700;
     font-size: 0.68rem;
     padding: 2px 7px;
@@ -527,11 +535,11 @@
     font-size: 0.68rem;
     padding: 1px 6px;
     border-radius: 4px;
-    background: #2b2823;
+    background: var(--item);
     color: var(--text-dim);
     margin-left: 4px;
   }
-  .match-item.solve-item { background: #1e2430; border-color: #2d3d4a; }
+  .match-item.solve-item { background: #eef3fb; border-color: #c7d5ea; }
   .match-item .match-badge.badge-solve { background: var(--accent); }
   .row-section { margin-top: 6px; }
   .row-section summary {
@@ -541,8 +549,8 @@
     gap: 8px;
     padding: 6px 10px;
     border-radius: 7px;
-    background: #1a1a1a;
-    border: 1px solid #333;
+    background: var(--sunken);
+    border: 1px solid var(--border);
     font-size: 0.78rem;
     font-weight: 600;
     cursor: pointer;
@@ -563,8 +571,8 @@
     gap: 8px;
     padding: 4px 9px;
     border-radius: 6px;
-    background: rgba(255,255,255,0.03);
-    border: 1px solid #2b2b2b;
+    background: rgba(0,0,0,0.03);
+    border: 1px solid var(--border);
     border-left: 3px solid var(--accent);
     font-size: 0.72rem;
     font-weight: 700;
@@ -583,7 +591,7 @@
   .paint-context { display:flex; align-items:center; gap:12px; margin:8px 16px 0; padding:8px 10px; border:1px solid var(--border); border-radius:8px; font-size:0.78rem; line-height:1.5; }
   .paint-target-tile { flex-shrink:0; display:grid; grid-template-columns:repeat(3, 14px); grid-auto-rows:14px; gap:1px; padding:2px; background:#000; border-radius:4px; }
   .paint-palette { display:grid; grid-template-columns:repeat(6, minmax(0, 1fr)); gap:6px; padding:8px 16px; }
-  .paint-swatch { display:grid; justify-items:center; gap:3px; min-width:0; padding:7px 2px 6px; border-radius:8px; border:1px solid var(--border); background:#2e2e2e; color:var(--text); font-size:0.7rem; cursor:pointer; }
+  .paint-swatch { display:grid; justify-items:center; gap:3px; min-width:0; padding:7px 2px 6px; border-radius:8px; border:1px solid var(--border); background:var(--control); color:var(--text); font-size:0.7rem; cursor:pointer; }
   .paint-swatch[aria-pressed="true"] { border-color: var(--accent); box-shadow:0 0 0 1px var(--accent); }
   .paint-swatch-dot { width:26px; height:26px; border-radius:6px; box-shadow:inset 0 0 0 1px rgba(0,0,0,0.3); }
   .paint-swatch-ct { font-family:'SF Mono',Monaco,monospace; font-size:0.66rem; color:var(--text-dim); }
@@ -591,7 +599,7 @@
   .paint-swatch-ct.over { color:var(--error); font-weight:700; }
   .paint-workbench { display:grid; grid-template-columns:minmax(0, 1fr) minmax(0, 1.15fr); gap:8px; align-items:center; padding:0 16px; }
   .paint-stage { position:relative; min-width:0; border-radius:8px; overflow:hidden; }
-  .paint-view-btn { position:absolute; width:36px; height:36px; padding:0; border-radius:50%; border:1px solid var(--border); background:#2e2e2e; color:var(--text); font-size:1.2rem; line-height:1; cursor:pointer; }
+  .paint-view-btn { position:absolute; width:36px; height:36px; padding:0; border-radius:50%; border:1px solid var(--border); background:var(--control); color:var(--text); font-size:1.2rem; line-height:1; cursor:pointer; }
   #paintMsg { min-height:1.2em; padding:6px 16px 0; font-size:0.78rem; color:var(--text-dim); }
   #paintMsg.paint-msg-error { color:var(--error); font-weight:600; }
   .paint-cell.paint-flag { outline:3px solid var(--error); outline-offset:1px; position:relative; z-index:1; }
@@ -602,7 +610,7 @@
   .paint-face-label { font-size:0.58rem; color:var(--text-dim); letter-spacing:0.02em; }
   .paint-grid { display:grid; grid-template-columns:repeat(3, 20px); grid-template-rows:repeat(3, 20px); gap:2px; background:#000; padding:2px; border-radius:4px; }
   .paint-cell { width:20px; height:20px; border-radius:3px; cursor:pointer; border:1px solid rgba(0,0,0,0.4); }
-  .paint-cell.paint-center { cursor:default; box-shadow: inset 0 0 0 2px rgba(255,255,255,0.35); }
+  .paint-cell.paint-center { cursor:default; box-shadow: inset 0 0 0 2px rgba(0,0,0,0.35); }
   .section-group { margin-top: 8px; }
   .section-group:first-child { margin-top: 2px; }
   .section-group-header {
@@ -613,7 +621,7 @@
     font-size: 0.7rem;
     font-weight: 700;
     color: var(--text-dim);
-    background: rgba(255,255,255,0.03);
+    background: rgba(0,0,0,0.03);
     border-left: 3px solid var(--accent);
     letter-spacing: 0.03em;
     margin-bottom: 2px;
@@ -627,9 +635,9 @@
     border-radius: 10px;
     padding: 10px 12px;
     cursor: pointer;
-    background: #1c1a17;
+    background: var(--sunken);
   }
-  .source-card.active { border-color: var(--accent); background: #1a2030; }
+  .source-card.active { border-color: var(--accent); background: #edf3fd; }
   .source-card .source-card-title {
     font-size: 0.85rem;
     font-weight: 600;
@@ -652,7 +660,7 @@
     padding: 10px 12px;
     border-radius: 8px;
     border: 1px solid var(--border);
-    background: #1c1a17;
+    background: var(--sunken);
     color: var(--text);
     font-size: 0.9rem;
     margin-bottom: 8px;
@@ -670,13 +678,13 @@
   .submit-btn-row button.primary { margin-top: 0; }
   .cube-viewer-trigger {
     background: var(--accent);
-    color: #1a1209;
+    color: var(--on-accent);
     font-weight: 600;
   }
   .cube-viewer-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0,0,0,0.75);
+    background: rgba(0,0,0,0.5);
     z-index: 1000;
     display: flex;
     align-items: center;
@@ -732,7 +740,7 @@
     border: none;
     border-radius: 8px;
     background: var(--accent);
-    color: #1a1209;
+    color: var(--on-accent);
     cursor: pointer;
   }
   .cube-viewer-modal:focus { outline: none; }
@@ -757,15 +765,15 @@
     width: 100%;
     aspect-ratio: 1 / 1;
     flex-shrink: 0;
-    background: #0d0d0d;
+    background: var(--stage);
     touch-action: none;
   }
   .cube-viewer-canvas-wrap canvas { display: block; width: 100%; height: 100%; }
   .cube-orient-wrap { position: relative; flex-shrink: 0; }
   .cube-orient-label {
     position: absolute;
-    background: rgba(10,10,10,0.82);
-    color: #e0e0e0;
+    background: rgba(255,255,255,0.92);
+    color: var(--text);
     display: flex;
     align-items: center;
     gap: 5px;
@@ -775,7 +783,7 @@
     font-weight: 600;
     z-index: 5;
     pointer-events: none;
-    border: 1px solid rgba(255,255,255,0.12);
+    border: 1px solid var(--border);
     white-space: nowrap;
     letter-spacing: 0.01em;
   }
@@ -785,14 +793,14 @@
     height: 10px;
     border-radius: 50%;
     flex-shrink: 0;
-    border: 1px solid rgba(255,255,255,0.35);
+    border: 1px solid rgba(0,0,0,0.35);
   }
   .cube-orient-top    { top: 8px;    left: 50%; transform: translateX(-50%); }
   .cube-orient-bottom { bottom: 8px; left: 50%; transform: translateX(-50%); }
   .cube-orient-left   { left: 8px;   top: 50%;  transform: translateY(-50%); }
   .cube-orient-right  { right: 8px;  top: 50%;  transform: translateY(-50%); }
   .cube-viewer-snapshots { padding: 6px 16px 0; }
-  .cube-snapshot-move-desc { font-size:0.72rem; font-weight:600; color:#e0e0e0; text-align:center; margin-bottom:6px; }
+  .cube-snapshot-move-desc { font-size:0.72rem; font-weight:600; color:var(--text); text-align:center; margin-bottom:6px; }
   .cube-viewer-snapshots-row { display:flex; gap:10px; justify-content:center; align-items:flex-start; }
   .cube-snapshot-block { display:flex; flex-direction:column; align-items:center; gap:3px; }
   .cube-snapshot-label { font-size:0.6rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.05em; }
@@ -800,9 +808,9 @@
   .cube-snapshot-face-row { display:flex; gap:1px; }
   .cube-snapshot-face-wrap { display:flex; flex-direction:column; align-items:center; gap:1px; }
   .cube-snapshot-face-name { font-size:0.5rem; color:var(--text-dim); }
-  .cube-snapshot-grid { display:grid; grid-template-columns:repeat(3,13px); gap:1px; background:rgba(255,255,255,0.08); border-radius:2px; padding:1px; }
+  .cube-snapshot-grid { display:grid; grid-template-columns:repeat(3,13px); gap:1px; background:#000; border-radius:2px; padding:1px; }
   .cube-snapshot-cell { width:13px; height:13px; border-radius:1px; }
-  .cube-snapshot-cell.changed { box-shadow:0 0 0 2px rgba(255,255,255,0.85) inset; }
+  .cube-snapshot-cell.changed { box-shadow: inset 0 0 0 1px #000, inset 0 0 0 2px #fff; } /* a two-tone ring shows on every sticker color without tinting it */
   .cube-snapshot-arrow { font-size:1.1rem; color:var(--text-dim); padding-top:22px; }
   .cube-viewer-minimap {
     display: flex;
@@ -876,11 +884,11 @@
     font-size: 0.85rem;
     padding: 4px 9px;
     border-radius: 6px;
-    background: #1c1a17;
+    background: var(--sunken);
     color: var(--text-dim);
     border: 1px solid var(--border);
   }
-  .cube-viewer-move-chip.current { background: var(--accent); color: #1a1209; border-color: var(--accent); font-weight: 700; }
+  .cube-viewer-move-chip.current { background: var(--accent); color: var(--on-accent); border-color: var(--accent); font-weight: 700; }
   .cube-viewer-move-chip.done { opacity: 0.5; }
   .cube-viewer-controls {
     display: flex;
@@ -893,13 +901,13 @@
     padding: 14px 10px;
     border-radius: 8px;
     border: 1px solid var(--border);
-    background: #2e2e2e;
+    background: var(--control);
     color: var(--text);
     font-size: 0.85rem;
     cursor: pointer;
   }
   .cube-viewer-controls button:disabled { opacity: 0.35; cursor: not-allowed; }
-  .cube-viewer-controls button.play-btn { background: var(--accent); color: #1a1209; font-weight: 600; border-color: var(--accent); }
+  .cube-viewer-controls button.play-btn { background: var(--accent); color: var(--on-accent); font-weight: 600; border-color: var(--accent); }
   .cube-viewer-hint { text-align: center; font-size: 0.7rem; color: var(--text-dim); padding: 0 16px 12px; }
 
   /* Row-by-row placement review ("Verify placement") */
@@ -910,10 +918,10 @@
   .review-subhead { padding: 0 16px 10px; font-size: 0.75rem; color: var(--text-dim); }
   .review-strip-wrap { padding: 4px 16px 10px; overflow-x: auto; }
   .review-strip { display: flex; gap: 8px; padding-bottom: 4px; }
-  .review-tile { flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; border: 2px solid transparent; border-radius: 8px; padding: 4px; background: #1a1a1a; }
+  .review-tile { flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 4px; cursor: pointer; border: 2px solid transparent; border-radius: 8px; padding: 4px; background: var(--sunken); }
   .review-tile:focus-visible { outline: 2px solid var(--accent); }
-  .review-tile.rt-verified { border-color: var(--success); background: #12241a; }
-  .review-tile.rt-flagged { border-color: var(--error); background: #2a1616; }
+  .review-tile.rt-verified { border-color: var(--success); background: var(--success-bg); }
+  .review-tile.rt-flagged { border-color: var(--error); background: var(--error-bg); }
   .review-tile .rt-cube { display: grid; grid-template-columns: repeat(3, 15px); grid-template-rows: repeat(3, 15px); gap: 1px; background: #000; padding: 2px; border-radius: 3px; }
   .review-tile .rt-cube > div { width: 15px; height: 15px; }
   .review-tile .rt-col { font-size: 0.62rem; color: var(--text-dim); }
@@ -922,9 +930,9 @@
   .review-tile.rt-flagged .rt-status { color: var(--error); }
   .review-tile .rt-unplaced { outline: 1px dashed var(--error); }
   .review-controls { display: flex; gap: 8px; padding: 8px 16px 10px; flex-shrink: 0; flex-wrap: wrap; }
-  .review-controls button { flex: 1; min-width: 90px; padding: 14px 10px; border-radius: 8px; border: 1px solid var(--border); background: #2e2e2e; color: var(--text); font-size: 0.82rem; cursor: pointer; }
+  .review-controls button { flex: 1; min-width: 90px; padding: 14px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--control); color: var(--text); font-size: 0.82rem; cursor: pointer; }
   .review-controls button:disabled { opacity: 0.35; cursor: not-allowed; }
-  .review-controls button.rc-primary { background: var(--accent); color: #1a1209; font-weight: 600; border-color: var(--accent); }
+  .review-controls button.rc-primary { background: var(--accent); color: var(--on-accent); font-weight: 600; border-color: var(--accent); }
   .review-progress { padding: 0 16px 10px; font-size: 0.72rem; color: var(--text-dim); }
   .review-hint { text-align: center; font-size: 0.68rem; color: var(--text-dim); padding: 0 16px 14px; }
 
@@ -937,10 +945,10 @@
   .cam-pattern { font-family: 'SF Mono', Monaco, monospace; font-size: 0.95rem; font-weight: 600; }
   .cam-loc { font-size: 0.72rem; color: var(--text-dim); }
   .cam-actions { display: flex; flex-direction: column; gap: 8px; }
-  .cam-actions button { padding: 11px; border-radius: 8px; border: 1px solid var(--border); background: #2e2e2e; color: var(--text); font-size: 0.85rem; cursor: pointer; text-align: left; }
-  .cam-actions button.rc-primary { background: var(--accent); color: #1a1209; font-weight: 600; border-color: var(--accent); text-align: center; }
-  .cam-actions button.cam-active-good { background: #12241a; border-color: var(--success); color: var(--success); font-weight: 600; }
-  .cam-actions button.cam-active-bad { background: #2a1616; border-color: var(--error); color: var(--error); font-weight: 600; }
+  .cam-actions button { padding: 11px; border-radius: 8px; border: 1px solid var(--border); background: var(--control); color: var(--text); font-size: 0.85rem; cursor: pointer; text-align: left; }
+  .cam-actions button.rc-primary { background: var(--accent); color: var(--on-accent); font-weight: 600; border-color: var(--accent); text-align: center; }
+  .cam-actions button.cam-active-good { background: var(--success-bg); border-color: var(--success); color: var(--success); font-weight: 600; }
+  .cam-actions button.cam-active-bad { background: var(--error-bg); border-color: var(--error); color: var(--error); font-weight: 600; }
 </style>
 <script>
 /**
@@ -3950,7 +3958,7 @@ function saveConsumedExportLines(planState) {
 // what's currently open" button, otherwise a plain "no preview" label.
 function buildSavedExportThumbnailBoxHtml(entry, escapedName) {
   const thumbImg = buildSavedExportThumbnailImgHtml(entry);
-  const boxStyle = 'width:40px; height:40px; flex-shrink:0; display:flex; align-items:center; justify-content:center; background:#0e0d0b; border:1px solid var(--border); border-radius:5px; overflow:hidden;';
+  const boxStyle = 'width:40px; height:40px; flex-shrink:0; display:flex; align-items:center; justify-content:center; background:var(--sunken); border:1px solid var(--border); border-radius:5px; overflow:hidden;';
   if (thumbImg) return `<div style="${boxStyle}">${thumbImg}</div>`;
   const plan = appState.patternPlanState;
   const canAttach = plan && plan.status === 'done' && !!plan.targetsInput && !!plan.mosaicWidth;
@@ -6366,7 +6374,7 @@ function renderPlanResult() {
   const progressBlock = planState.status === 'running' ? `
     <div class="result-box" style="margin-top:0;">
       <div class="status">⏳ Solving&hellip; ${planState.doneCount} of ${planState.totalCount}</div>
-      <div style="background:#111; border-radius:6px; height:10px; overflow:hidden; margin:8px 0;">
+      <div style="background:var(--track); border-radius:6px; height:10px; overflow:hidden; margin:8px 0;">
         <div style="background:var(--accent); height:100%; width:${(100 * planState.doneCount / Math.max(1, planState.totalCount)).toFixed(1)}%; transition:width 0.15s;"></div>
       </div>
       ${(() => { const est = estimateSolveTimeRemaining(planState); return est ? `<div style="font-size:0.72rem; color:var(--text-dim); margin-bottom:8px;">&#8987; ~${formatDuration(est.remainMs)} left &middot; ~${est.msPerCube < 1000 ? Math.round(est.msPerCube) + 'ms' : (est.msPerCube / 1000).toFixed(1) + 's'}/cube at the current pace</div>` : ''; })()}
@@ -6404,7 +6412,7 @@ function renderPlanResult() {
       <label for="rowFilterTo">to</label>
       <input type="number" min="1" id="rowFilterTo" value="${filter && filter.to ? filter.to : ''}" placeholder="to" style="width:60px;">
       ${filterActive ? `<button type="button" class="reset-link" style="margin:0;" id="clearRowFilterBtn">show all</button>` : ''}` : ''}
-      <input type="text" id="patternSearchInput" placeholder="Search pattern…" value="${appState.patternSearchFilter || ''}" style="width:130px; font-size:0.78rem; padding:3px 7px; border-radius:5px; border:1px solid var(--border); background:#111; color:var(--text);" aria-label="Filter placements by mosaic pattern">
+      <input type="text" id="patternSearchInput" placeholder="Search pattern…" value="${appState.patternSearchFilter || ''}" style="width:130px; font-size:0.78rem; padding:3px 7px; border-radius:5px; border:1px solid var(--border); background:var(--sunken); color:var(--text);" aria-label="Filter placements by mosaic pattern">
       ${patternSearch ? `<button type="button" class="reset-link" style="margin:0;" id="clearPatternSearchBtn">&#10005;</button>` : ''}
     </div>
   ` : '';
@@ -6429,7 +6437,7 @@ function renderPlanResult() {
     const complete = boards.filter(b => b.placed === b.total).length;
     const byKey = new Map(boards.map(b => [`${b.rowGroup},${b.colGroup}`, b]));
     const current = [...boards].sort((a, b) => a.rowGroup - b.rowGroup || a.colGroup - b.colGroup).find(b => b.placed < b.total);
-    const blend = (ratio) => { const g = [0x00, 0x9b, 0x48], d = [0x2a, 0x2a, 0x2a]; const m = g.map((gv, i) => Math.round(d[i] + (gv - d[i]) * ratio)); return `rgb(${m[0]},${m[1]},${m[2]})`; };
+    const blend = (ratio) => { const g = [0x00, 0x9b, 0x48], d = [0xe3, 0xdf, 0xd7]; const m = g.map((gv, i) => Math.round(d[i] + (gv - d[i]) * ratio)); return `rgb(${m[0]},${m[1]},${m[2]})`; };
     let cells = '';
     for (let r = nRows; r >= 1; r--) {
       for (let c = 0; c < nCols; c++) {
@@ -6437,8 +6445,8 @@ function renderPlanResult() {
         if (!b) { cells += `<div class="board-map-cell empty" style="visibility:hidden;"></div>`; continue; }
         const ratio = b.total ? b.placed / b.total : 0;
         const done = b.placed === b.total;
-        const bg = done ? 'var(--success)' : (ratio > 0 ? blend(ratio) : '#2a2a2a');
-        const txt = (done || ratio > 0.45) ? '#0d0d0d' : 'var(--text-dim)';
+        const bg = done ? 'var(--success)' : (ratio > 0 ? blend(ratio) : 'var(--track)');
+        const txt = done ? 'var(--on-accent)' : (ratio > 0 ? '#0d0d0d' : 'var(--text-dim)');
         cells += `<div class="board-map-cell${current && b === current ? ' current' : ''}" data-board="${r}-${c}" title="Board ${b.label}: ${b.placed}/${b.total} placed" style="background:${bg}; color:${txt};">${b.label}</div>`;
       }
     }
@@ -6450,7 +6458,7 @@ function renderPlanResult() {
         </div>
         ${(() => { const est = estimateTimeRemaining(planState); return est ? `<div style="font-size:0.72rem; color:var(--text-dim); margin-bottom:8px;">&#8987; ~${formatDuration(est.remainMs)} of solving left &middot; ~${est.secPerCube}s/cube at your recent pace</div>` : ''; })()}
         <div class="board-map" style="grid-template-columns:repeat(${nCols}, 1fr);">${cells}</div>
-        <div class="board-map-legend"><span><i style="background:#2a2a2a;"></i>not started</span><span><i style="background:${blend(0.5)};"></i>in progress</span><span><i style="background:var(--success);"></i>done</span><span style="margin-left:auto;">tap a board to open it</span></div>
+        <div class="board-map-legend"><span><i style="background:var(--track);"></i>not started</span><span><i style="background:${blend(0.5)};"></i>in progress</span><span><i style="background:var(--success);"></i>done</span><span style="margin-left:auto;">tap a board to open it</span></div>
       </div>`;
   })() : '';
 
@@ -6477,14 +6485,14 @@ function renderPlanResult() {
           <span>${placedCount} of ${total} cubes placed</span>
           <span>${pct}%</span>
         </div>
-        <div style="background:#111; border-radius:6px; height:8px; overflow:hidden;" role="progressbar" aria-valuenow="${placedCount}" aria-valuemin="0" aria-valuemax="${total}" aria-label="Mosaic placement progress">
+        <div style="background:var(--track); border-radius:6px; height:8px; overflow:hidden;" role="progressbar" aria-valuenow="${placedCount}" aria-valuemin="0" aria-valuemax="${total}" aria-label="Mosaic placement progress">
           <div style="background:var(--success); height:100%; width:${pct}%; transition:width 0.2s;"></div>
         </div>
       </div>`;
     })() : ''}
     ${(planState.status === 'done' && placedCount < planState.placements.length) ? `<div style="text-align:right; margin:-8px 0 10px;"><button type="button" class="reset-link" id="jumpNextUnplacedBtn" style="margin:0; font-size:0.78rem;">&#8595; Next unplaced</button></div>` : ''}
     ${buildFreeMatchHuntingListHtml(planState)}
-    ${lastSectionMarkUndo ? `<div style="display:flex; align-items:center; justify-content:space-between; padding:6px 10px; background:#1e2a1e; border:1px solid #2d4a2d; border-radius:8px; margin-bottom:8px; font-size:0.8rem;"><span style="color:var(--success);">&#10003; Section marked done (${lastSectionMarkUndo.length} cubes)</span><button type="button" id="undoMarkSectionBtn" class="reset-link" style="margin:0; color:var(--accent-text);">Undo</button></div>` : ''}
+    ${lastSectionMarkUndo ? `<div style="display:flex; align-items:center; justify-content:space-between; padding:6px 10px; background:var(--success-bg); border:1px solid var(--success-border); border-radius:8px; margin-bottom:8px; font-size:0.8rem;"><span style="color:var(--success);">&#10003; Section marked done (${lastSectionMarkUndo.length} cubes)</span><button type="button" id="undoMarkSectionBtn" class="reset-link" style="margin:0; color:var(--accent-text);">Undo</button></div>` : ''}
     ${rowFilterBlock}
     ${(width && planState.status !== 'running') ? `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; font-size:0.75rem;"><button type="button" class="reset-link" id="sortEasyFirstBtn" style="margin:0;">${appState.patternSortEasyFirst ? 'Sorted: easy first &#10005;' : 'Sort: easy first'}</button><button type="button" class="reset-link" id="collapseAllBtn" style="margin:0;"></button></div>` : ''}
     ${planState.placements.length > 0 ? (() => {
@@ -6649,7 +6657,7 @@ function renderPlanResult() {
               const secPct = items.length === 0 ? 0 : Math.round(100 * secPlaced / items.length);
               return `<div class="section-group">
                 <div class="section-group-header${secDone ? ' section-done' : ''}">
-                  Section ${sec}<span class="section-group-progress" style="display:flex;align-items:center;gap:5px;margin-left:auto;">${secDone ? `<span>✓ ${items.length}</span>` : `<span style="font-size:0.65rem;white-space:nowrap;">${secPlaced}/${items.length}</span><div style="width:36px;background:#111;border-radius:3px;height:5px;overflow:hidden;flex-shrink:0;"><div style="background:var(--success);height:100%;width:${secPct}%;transition:width 0.2s;"></div></div>`}</span>
+                  Section ${sec}<span class="section-group-progress" style="display:flex;align-items:center;gap:5px;margin-left:auto;">${secDone ? `<span>✓ ${items.length}</span>` : `<span style="font-size:0.65rem;white-space:nowrap;">${secPlaced}/${items.length}</span><div style="width:36px;background:var(--track);border-radius:3px;height:5px;overflow:hidden;flex-shrink:0;"><div style="background:var(--success);height:100%;width:${secPct}%;transition:width 0.2s;"></div></div>`}</span>
                   ${!secDone ? `<button type="button" class="reset-link" style="margin:0; font-size:0.65rem; color:var(--accent-text); padding:0 6px;" data-mark-section="${secIndices}">Mark all done</button>` : ''}
                 </div>
                 <div class="match-list">${displayItems.map(renderItem).join('')}</div>
@@ -8618,7 +8626,7 @@ function openCubePainter(placementIndex) {
         <button type="button" id="paintPrevCubeBtn">&larr; Prev cube</button>
         <button type="button" id="paintResetBtn">Clear</button>
         <button type="button" id="paintAlreadySolvedBtn">Already solved</button>
-        <button type="button" id="paintSolveBtn" style="background:var(--accent); color:#1a1209; font-weight:700;">Get the turns &rarr;</button>
+        <button type="button" id="paintSolveBtn" style="background:var(--accent); color:var(--on-accent); font-weight:700;">Get the turns &rarr;</button>
       </div>
       <div class="cube-viewer-hint">Keys: W Y R O B G pick a color &middot; arrows turn the view &middot; Enter gets the turns &middot; S already solved &middot; [ prev cube</div>
     </div>`;
@@ -8918,7 +8926,7 @@ function openCubeViewer(placementIndex) {
     }
 
     const seams = (hasLeft || hasBelow)
-      ? `<div role="img" aria-label="Seam preview: how board ${blockInfo.label} meets its neighbouring boards" style="margin:8px 16px 2px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:#141414;">
+      ? `<div role="img" aria-label="Seam preview: how board ${blockInfo.label} meets its neighbouring boards" style="margin:8px 16px 2px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--sunken);">
            <div style="font-size:0.68rem;color:var(--text);font-weight:600;margin-bottom:6px;">How board ${blockInfo.label} meets its placed neighbours</div>
            <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start;">${leftSeam}${belowSeam}</div>
          </div>`
@@ -8950,13 +8958,13 @@ function openCubeViewer(placementIndex) {
       ${navPos >= 0 ? `<div style="padding:0 16px 10px;">
         <div style="display:flex; justify-content:space-between; font-size:0.72rem; color:var(--text-dim); margin-bottom:4px;">
           <span>${blockInfo
-            ? `<strong style="color:var(--text);">Board ${blockInfo.label}</strong> &middot; cube <input id="cubeViewerCubeNumInput" type="number" min="1" max="${blockInfo.size}" value="${blockInfo.posInBlock + 1}" aria-label="Jump to a cube number on this board" style="width:3.4em; padding:1px 4px; font-size:0.72rem; text-align:center; border:1px solid var(--border); border-radius:4px; background:#1a1a1a; color:var(--text);"> of ${blockInfo.size}`
+            ? `<strong style="color:var(--text);">Board ${blockInfo.label}</strong> &middot; cube <input id="cubeViewerCubeNumInput" type="number" min="1" max="${blockInfo.size}" value="${blockInfo.posInBlock + 1}" aria-label="Jump to a cube number on this board" style="width:3.4em; padding:1px 4px; font-size:0.72rem; text-align:center; border:1px solid var(--border); border-radius:4px; background:var(--sunken); color:var(--text);"> of ${blockInfo.size}`
             : `Cube ${navPos + 1} of ${navigable.length} needing turns`}</span>
           <span>${blockInfo
             ? `${blockInfo.placedInBlock} placed on board &middot; ${navPos + 1}/${navigable.length} overall`
             : `${placedSoFar} marked placed so far`}</span>
         </div>
-        <div style="background:#111; border-radius:6px; height:6px; overflow:hidden;">
+        <div style="background:var(--track); border-radius:6px; height:6px; overflow:hidden;">
           <div style="background:var(--accent); height:100%; width:${(blockInfo
             ? 100 * (blockInfo.posInBlock + 1) / Math.max(1, blockInfo.size)
             : 100 * (navPos + 1) / Math.max(1, navigable.length)).toFixed(1)}%;"></div>
@@ -8975,7 +8983,7 @@ function openCubeViewer(placementIndex) {
       <div id="cubeViewerFinalStep" aria-live="polite"></div>
       <div style="display:flex; align-items:center; gap:8px; padding:10px 16px 4px;">
         <div class="cube-viewer-step-label" id="cubeViewerStepLabel" style="flex:1; padding:0;"></div>
-        <button id="cubeViewerLargeTextBtn" style="flex-shrink:0; padding:2px 8px; border-radius:5px; font-size:0.68rem; font-weight:700; cursor:pointer; border:1px solid ${viewerLargeText ? 'var(--accent)' : 'var(--border)'}; background:${viewerLargeText ? 'var(--accent)' : '#2e2e2e'}; color:${viewerLargeText ? '#1a1209' : 'var(--text)'};" title="Toggle large move text">A+</button>
+        <button id="cubeViewerLargeTextBtn" style="flex-shrink:0; padding:2px 8px; border-radius:5px; font-size:0.68rem; font-weight:700; cursor:pointer; border:1px solid ${viewerLargeText ? 'var(--accent)' : 'var(--border)'}; background:${viewerLargeText ? 'var(--accent)' : 'var(--control)'}; color:${viewerLargeText ? 'var(--on-accent)' : 'var(--text)'};" title="Toggle large move text">A+</button>
       </div>
       <div class="cube-viewer-moves-strip" id="cubeViewerMovesStrip" tabindex="0" role="group" aria-label="Full move sequence, scrollable"></div>
       <div style="padding:2px 16px 0;">
@@ -8993,7 +9001,7 @@ function openCubeViewer(placementIndex) {
         <button data-speed="220" class="viewer-speed-chip" style="padding:2px 10px; border-radius:5px; font-size:0.7rem; cursor:pointer; border:1px solid;">Normal</button>
         <button data-speed="80" class="viewer-speed-chip" style="padding:2px 10px; border-radius:5px; font-size:0.7rem; cursor:pointer; border:1px solid;">Fast</button>
         <span style="color:var(--border);">|</span>
-        <button id="cubeViewerFlipBtn" style="padding:2px 10px; border-radius:5px; font-size:0.7rem; cursor:pointer; border:1px solid var(--border); background:#2e2e2e; color:var(--text);" title="Flip cube to see back (F key)">&#8644; Flip</button>
+        <button id="cubeViewerFlipBtn" style="padding:2px 10px; border-radius:5px; font-size:0.7rem; cursor:pointer; border:1px solid var(--border); background:var(--control); color:var(--text);" title="Flip cube to see back (F key)">&#8644; Flip</button>
       </div>
       <div class="cube-viewer-controls" style="padding-top:0;">
         <button id="cubeViewerPrevCubeBtn" ${(navPos < 0 || navPos <= 0) ? 'disabled' : ''}>&larr; Prev cube</button>
@@ -9069,8 +9077,8 @@ function openCubeViewer(placementIndex) {
   function applySpeedBtnStyles() {
     overlay.querySelectorAll('.viewer-speed-chip').forEach(btn => {
       const active = parseInt(btn.dataset.speed) === viewerPlaySpeed;
-      btn.style.background = active ? 'var(--accent)' : '#2e2e2e';
-      btn.style.color = active ? '#1a1209' : 'var(--text)';
+      btn.style.background = active ? 'var(--accent)' : 'var(--control)';
+      btn.style.color = active ? 'var(--on-accent)' : 'var(--text)';
       btn.style.borderColor = active ? 'var(--accent)' : 'var(--border)';
     });
   }
@@ -9082,8 +9090,8 @@ function openCubeViewer(placementIndex) {
     viewerLargeText = !viewerLargeText;
     const btn = document.getElementById('cubeViewerLargeTextBtn');
     if (btn) {
-      btn.style.background = viewerLargeText ? 'var(--accent)' : '#2e2e2e';
-      btn.style.color = viewerLargeText ? '#1a1209' : 'var(--text)';
+      btn.style.background = viewerLargeText ? 'var(--accent)' : 'var(--control)';
+      btn.style.color = viewerLargeText ? 'var(--on-accent)' : 'var(--text)';
       btn.style.borderColor = viewerLargeText ? 'var(--accent)' : 'var(--border)';
     }
     updateStepUI();
@@ -9318,7 +9326,7 @@ function openCubeViewer(placementIndex) {
           if (top + h * scale + 24 > window.innerHeight - 10) top = snapshotRect.top - h * scale - 28;
           let left = snapshotRect.left;
           if (left + w * scale + 24 > window.innerWidth - 10) left = window.innerWidth - w * scale - 34;
-          popover.style.cssText = `position:fixed; z-index:10001; background:#1a1a1a; border:1px solid var(--border); border-radius:10px; padding:12px; box-shadow:0 8px 32px #000a; width:${w * scale + 24}px; height:${h * scale + 24}px; overflow:hidden; top:${top}px; left:${left}px;`;
+          popover.style.cssText = `position:fixed; z-index:10001; background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:12px; box-shadow:0 8px 32px rgba(0,0,0,0.25); width:${w * scale + 24}px; height:${h * scale + 24}px; overflow:hidden; top:${top}px; left:${left}px;`;
           popover.innerHTML = `<div style="position:absolute; top:12px; left:12px; transform-origin:top left; transform:scale(${scale});">${block.outerHTML}</div>`;
           document.body.appendChild(popover);
           setTimeout(() => {
