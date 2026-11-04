@@ -5700,13 +5700,18 @@ function blockGroupForPosition(row, col, sectionW, sectionH, firstH) {
   return { rowGroup, colGroup };
 }
 
+// A physical board's name: the letter is its row of boards (A = bottom row)
+// and the number is its place in that row, left to right. So the bottom row
+// is A1, A2, A3..., the next row up is B1, B2, B3..., matching the build order.
 function blockLabelForGroup(g) {
-  return String.fromCharCode(65 + g.colGroup) + g.rowGroup;
+  return String.fromCharCode(64 + g.rowGroup) + (g.colGroup + 1);
 }
 
+// A section as printed on the Ruwix PDF, which names them the other way
+// around (see above) and has to keep matching the printed page.
 function sectionLabelForPosition(row, col, sectionW, sectionH, firstH) {
   const g = blockGroupForPosition(row, col, sectionW, sectionH, firstH);
-  return g ? blockLabelForGroup(g) : null;
+  return g ? String.fromCharCode(65 + g.colGroup) + g.rowGroup : null;
 }
 
 // Effective geometry for block (board) mode: prefer the values captured

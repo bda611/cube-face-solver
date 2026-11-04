@@ -144,6 +144,32 @@ test('falls back to the whole-cube solver if a result fails its check', () => {
   assert.ok(fallback.moveCount > quick.moveCount, 'should have used the longer whole-cube route');
 });
 
+test('boards are named by row letter and place in that row, in build order', () => {
+  const { t } = app;
+  // 40 x 50 cubes on boards of 10 x 10: 4 boards across, 5 rows of boards.
+  const label = (row, col) => t.blockLabelForGroup(t.blockGroupForPosition(row, col, 10, 10, 10));
+  assert.equal(label(1, 1), 'A1');
+  assert.equal(label(10, 40), 'A4');
+  assert.equal(label(11, 1), 'B1');
+  assert.equal(label(11, 31), 'B4');
+  assert.equal(label(21, 21), 'C3');
+  assert.equal(label(50, 40), 'E4');
+
+  const plan = { blockOrder: true, boardWidth: 10, boardHeight: 10, mosaicWidth: 40 };
+  // The first cube of each board, shuffled out of order by listing rows top-down.
+  const cubes = [];
+  for (let row = 4; row >= 0; row--) for (let col = 3; col >= 0; col--) cubes.push({ targetLineNum: row * 10 * 40 + col * 10 + 1 });
+  const order = cubes.sort(t.blockOrderComparator(plan)).map(p => t.blockLabelForGroup(t.blockGroupForPlacement(p, plan)));
+  assert.equal(order.join(' '), 'A1 A2 A3 A4 B1 B2 B3 B4 C1 C2 C3 C4 D1 D2 D3 D4 E1 E2 E3 E4');
+});
+
+test('Ruwix PDF sections keep the names printed on the PDF', () => {
+  const { t } = app;
+  assert.equal(t.sectionLabelForPosition(1, 1, 3, 4, 1), 'A1');
+  assert.equal(t.sectionLabelForPosition(1, 4, 3, 4, 1), 'B1');
+  assert.equal(t.sectionLabelForPosition(2, 1, 3, 4, 1), 'A2');
+});
+
 test('rejects physically impossible cubes', () => {
   const { t } = app;
   const change = {
