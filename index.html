@@ -745,6 +745,7 @@
   .cube-viewer-modal:focus { outline: none; }
   .backup-reminder { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin:0 16px 8px; padding:8px 12px; border:1px solid var(--free); border-radius:8px; background:rgba(217,181,60,0.08); font-size:0.78rem; }
   .backup-reminder .secondary-btn { margin:0; flex-shrink:0; }
+  .plan-auto-save .backup-reminder { margin:0 0 12px; }
   .cube-viewer-header {
     display: flex;
     align-items: flex-start;
@@ -3885,6 +3886,7 @@ function savePlanRunProgress(planState) {
   }
 
   planState._saveVersion = (lastKnownSaveVersion ?? 0) + 1;
+  scheduleAutoSave(planState); // ahead of the write below, so a full browser storage can't stop it
   try {
     localStorage.setItem(PLAN_RUN_STORAGE_KEY, JSON.stringify(planState));
   } catch (e) {
@@ -6707,6 +6709,7 @@ function renderPlanResult() {
       </div>`;
     })() : ''}
     ${(planState.status === 'done' && placedCount < planState.placements.length) ? `<div style="text-align:right; margin:-8px 0 10px;"><button type="button" class="reset-link" id="jumpNextUnplacedBtn" style="margin:0; font-size:0.78rem;">&#8595; Next unplaced</button></div>` : ''}
+    ${planState.status === 'done' ? '<div id="planAutoSaveSlot" class="plan-auto-save"></div>' : ''}
     ${buildFreeMatchHuntingListHtml(planState)}
     ${lastSectionMarkUndo ? `<div style="display:flex; align-items:center; justify-content:space-between; padding:6px 10px; background:var(--success-bg); border:1px solid var(--success-border); border-radius:8px; margin-bottom:8px; font-size:0.8rem;"><span style="color:var(--success);">&#10003; Section marked done (${lastSectionMarkUndo.length} cubes)</span><button type="button" id="undoMarkSectionBtn" class="reset-link" style="margin:0; color:var(--accent-text);">Undo</button></div>` : ''}
     ${rowFilterBlock}
@@ -6929,6 +6932,7 @@ function renderPlanResult() {
   if (printBtn) printBtn.onclick = () => handlePrintPlan(planState, exportList);
   const backupBtn = document.getElementById('backupPlanBtn');
   if (backupBtn) backupBtn.onclick = () => { downloadPlanBackup(planState); renderPlanResult(); };
+  renderAutoSaveNotice(document.getElementById('planAutoSaveSlot'), planState);
   const fromInput = document.getElementById('rowFilterFrom');
   const toInput = document.getElementById('rowFilterTo');
   if (fromInput) fromInput.oninput = (e) => {
@@ -7800,14 +7804,210 @@ function downloadPlanBackup(planState) {
 // has to come from a click, since browsers limit unprompted downloads.
 function renderBackupReminder(slot, planState) {
   if (!slot) return;
+  const autoSave = autoSaveStatus(planState);
+  if (autoSave === 'on') { slot.innerHTML = ''; return; }
+  if (autoSave === 'paused' || autoSave === 'failed') { renderAutoSaveNotice(slot, planState); return; }
   if (!backupReminderDue(planState)) { slot.innerHTML = ''; return; }
   const placed = planState.placements.filter(p => p.placed).length;
-  slot.innerHTML = `<div class="backup-reminder"><span>${placed} cubes placed. Your progress is only in this browser, so it's a good time to back it up.</span><button type="button" class="secondary-btn">Download backup</button></div>`;
-  slot.querySelector('button').onclick = (e) => {
+  slot.innerHTML = `<div class="backup-reminder"><span>${placed} cubes placed. Your progress is only in this browser, so it's a good time to back it up.</span><span style="display:flex; gap:8px; flex-wrap:wrap;"><button type="button" class="secondary-btn" data-backup>Download backup</button>${autoSave === 'off' ? '<button type="button" class="secondary-btn" data-auto-save>Turn on auto-save</button>' : ''}</span></div>`;
+  slot.querySelector('[data-backup]').onclick = (e) => {
     e.currentTarget.blur(); // so Enter and the arrow keys go back to the walkthrough
     downloadPlanBackup(planState);
     slot.innerHTML = '';
   };
+  const autoSaveBtn = slot.querySelector('[data-auto-save]');
+  if (autoSaveBtn) autoSaveBtn.onclick = (e) => { e.currentTarget.blur(); connectAutoSave(planState); };
+}
+
+// Auto-save: keeps a progress backup file up to date after each change. The
+// browser writes to the file you pick, and getting it online is left to the
+// OneDrive or Google Drive app, so picking a file in one of their folders is
+// what stores it online. The link belongs to one plan, so a new mosaic or a
+// restored older backup can't overwrite the file until a file is picked for it.
+const AUTO_SAVE_DELAY_MS = 2000;
+let autoSaveLink = null; // { handle, planId, fileName }
+let autoSavePermission = null;
+let autoSaveFailed = false;
+let autoSaveLastAt = null;
+let autoSavePendingPlan = null;
+let autoSaveTimer = null;
+let autoSaveWriting = false;
+
+function autoSaveSupported() {
+  return typeof window.showSaveFilePicker === 'function';
+}
+
+function autoSaveStatus(planState) {
+  const linked = planState && planState.autoSaveId && autoSaveLink && autoSaveLink.planId === planState.autoSaveId;
+  if (!linked) return autoSaveSupported() ? 'off' : 'unsupported';
+  if (autoSavePermission !== 'granted') return 'paused';
+  return autoSaveFailed ? 'failed' : 'on';
+}
+
+function scheduleAutoSave(planState) {
+  const status = autoSaveStatus(planState);
+  if (planState.status !== 'done' || (status !== 'on' && status !== 'failed')) return;
+  autoSavePendingPlan = planState;
+  clearTimeout(autoSaveTimer);
+  autoSaveTimer = setTimeout(flushAutoSave, AUTO_SAVE_DELAY_MS);
+}
+
+async function flushAutoSave() {
+  clearTimeout(autoSaveTimer);
+  autoSaveTimer = null;
+  if (autoSaveWriting || !autoSavePendingPlan) return;
+  const plan = autoSavePendingPlan;
+  autoSavePendingPlan = null;
+  const status = autoSaveStatus(plan);
+  if (status !== 'on' && status !== 'failed') return;
+  autoSaveWriting = true;
+  try {
+    const writable = await autoSaveLink.handle.createWritable();
+    await writable.write(buildPlanBackupJson(plan));
+    await writable.close(); // the file only changes here, so a failed write leaves the last good copy
+    autoSaveFailed = false;
+    autoSaveLastAt = new Date();
+  } catch (e) {
+    if (e.name === 'NotAllowedError' || e.name === 'SecurityError') autoSavePermission = 'prompt';
+    else autoSaveFailed = true;
+  }
+  autoSaveWriting = false;
+  refreshAutoSaveUi();
+  if (autoSavePendingPlan && !autoSaveTimer) flushAutoSave();
+}
+
+function openAutoSaveDb() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open('cubeFaceSolverAutoSave', 1);
+    request.onupgradeneeded = () => request.result.createObjectStore('links');
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+// A file link can't go in localStorage, so it's kept in IndexedDB.
+async function storeAutoSaveLink(link) {
+  const db = await openAutoSaveDb();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction('links', 'readwrite');
+    tx.objectStore('links').put(link, 'current');
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+  });
+  db.close();
+}
+
+async function loadAutoSaveLink() {
+  const db = await openAutoSaveDb();
+  const link = await new Promise((resolve, reject) => {
+    const request = db.transaction('links').objectStore('links').get('current');
+    request.onsuccess = () => resolve(request.result || null);
+    request.onerror = () => reject(request.error);
+  });
+  db.close();
+  return link;
+}
+
+async function connectAutoSave(planState) {
+  let handle;
+  try {
+    handle = await window.showSaveFilePicker({
+      suggestedName: 'mosaic_progress.json',
+      types: [{ description: 'Mosaic progress', accept: { 'application/json': ['.json'] } }],
+    });
+  } catch (e) {
+    if (e.name !== 'AbortError') showStorageWarning("⚠ Auto-save couldn't use that file. Try choosing a file in a different folder.");
+    return;
+  }
+  if (!planState.autoSaveId) planState.autoSaveId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  autoSaveLink = { handle, planId: planState.autoSaveId, fileName: handle.name };
+  autoSavePermission = 'granted';
+  autoSaveFailed = false;
+  autoSaveLastAt = null;
+  try {
+    await storeAutoSaveLink(autoSaveLink);
+  } catch (e) {
+    showStorageWarning("⚠ Auto-save is on for now, but the browser couldn't remember your file. You'll need to choose it again next time you open this page.");
+  }
+  savePlanRunProgress(planState);
+  await flushAutoSave();
+  refreshAutoSaveUi();
+}
+
+async function resumeAutoSave(planState) {
+  try {
+    autoSavePermission = await autoSaveLink.handle.requestPermission({ mode: 'readwrite' });
+  } catch (e) {
+    autoSavePermission = 'prompt';
+  }
+  if (autoSavePermission === 'granted') {
+    autoSavePendingPlan = planState;
+    await flushAutoSave();
+  }
+  refreshAutoSaveUi();
+}
+
+function retryAutoSave(planState) {
+  autoSavePendingPlan = planState;
+  return flushAutoSave();
+}
+
+function autoSaveNotice(planState) {
+  const status = autoSaveStatus(planState);
+  const name = autoSaveLink ? autoSaveLink.fileName : '';
+  const choose = (label) => ({ label, run: () => connectAutoSave(planState) });
+  if (status === 'on') {
+    const when = autoSaveLastAt ? ` Last saved ${autoSaveLastAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}.` : '';
+    return { text: `Auto-saving progress to ${name}.${when}`, actions: [choose('Use a different file')] };
+  }
+  if (status === 'paused') return { text: `Auto-save is paused until you allow it to keep saving to ${name}.`, actions: [{ label: 'Resume auto-save', run: () => resumeAutoSave(planState) }] };
+  if (status === 'failed') return { text: `Auto-save couldn't update ${name}, so that file is out of date.`, actions: [{ label: 'Try again', run: () => retryAutoSave(planState) }, choose('Choose another file')] };
+  if (status === 'off') return { text: 'Keep a copy of your progress online by auto-saving to a file in your OneDrive or Google Drive folder.', actions: [choose('Turn on auto-save')] };
+  return { text: 'Auto-save needs Chrome or Edge. In this browser, use the progress backup button instead.', actions: [] };
+}
+
+function renderAutoSaveNotice(slot, planState) {
+  if (!slot) return;
+  const { text, actions } = autoSaveNotice(planState);
+  const box = document.createElement('div');
+  box.className = 'backup-reminder';
+  const label = document.createElement('span');
+  label.textContent = text;
+  const buttons = document.createElement('span');
+  buttons.style.cssText = 'display:flex; gap:8px; flex-wrap:wrap;';
+  actions.forEach(({ label: buttonLabel, run }) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'secondary-btn';
+    button.textContent = buttonLabel;
+    button.onclick = () => { button.blur(); run(); }; // so Enter and the arrow keys go back to the walkthrough
+    buttons.appendChild(button);
+  });
+  box.append(label, buttons);
+  slot.replaceChildren(box);
+}
+
+function refreshAutoSaveUi() {
+  const plan = appState.patternPlanState;
+  if (!plan) return;
+  renderAutoSaveNotice(document.getElementById('planAutoSaveSlot'), plan);
+  renderBackupReminder(document.getElementById('paintBackupSlot'), plan);
+  renderBackupReminder(document.getElementById('viewerBackupSlot'), plan);
+}
+
+async function initAutoSave() {
+  if (!autoSaveSupported()) return;
+  // Browsers may cut timers short once a tab is hidden, so save right away instead.
+  document.addEventListener('visibilitychange', () => { if (document.hidden) flushAutoSave(); });
+  try {
+    const link = await loadAutoSaveLink();
+    if (!link) return;
+    autoSaveLink = link;
+    autoSavePermission = await link.handle.queryPermission({ mode: 'readwrite' });
+  } catch (e) {
+    return; // the page still works, and auto-save just shows as off
+  }
+  refreshAutoSaveUi();
 }
 
 // Puts a saved or restored plan back on screen, with everything that isn't
@@ -7853,6 +8053,7 @@ function restorePlanFromBackupJson(jsonText) {
 
   plan.status = 'done';
   plan.solveQueue = [];
+  delete plan.autoSaveId; // an older backup mustn't overwrite newer progress in the auto-save file
   adoptSavedPlan(plan);
   clearPlanRunProgress();
   const stored = savePlanRunProgress(plan);
@@ -9998,6 +10199,7 @@ window.addEventListener('load', () => {
     const savedPlan = loadPlanRunProgress();
     if (savedPlan && savedPlan.status === 'done') adoptSavedPlan(savedPlan);
     render();
+    initAutoSave();
   }, 50);
 });
 </script>

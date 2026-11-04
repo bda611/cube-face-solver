@@ -424,6 +424,89 @@ test('the backup reminder appears every 100 placed cubes', () => {
   assert.equal(t.backupReminderDue(plan), true);
 });
 
+// A stand-in for the file the browser would write to.
+function fakeAutoSaveFile(plan, failWith = null) {
+  const { t } = app;
+  const file = { writes: [] };
+  plan.autoSaveId = 'plan-a';
+  t.autoSaveLink = {
+    fileName: 'progress.json',
+    planId: 'plan-a',
+    handle: {
+      createWritable: async () => {
+        if (failWith) { const e = new Error('nope'); e.name = failWith; throw e; }
+        let text = '';
+        return { write: async (s) => { text = s; }, close: async () => { file.writes.push(text); } };
+      },
+    },
+  };
+  t.autoSavePermission = 'granted';
+  t.autoSaveFailed = false;
+  return file;
+}
+function endAutoSave() {
+  const { t } = app;
+  clearTimeout(t.autoSaveTimer);
+  t.autoSaveTimer = null;
+  t.autoSavePendingPlan = null;
+  t.autoSaveLink = null;
+  t.autoSavePermission = null;
+  t.autoSaveFailed = false;
+}
+
+test('auto-save writes a file that restores the latest progress', async () => {
+  const { t } = app;
+  const plan = buildPlan(['WYROBGWYR', 'GGGYYYBBB'], solvedRow(), 2);
+  const file = fakeAutoSaveFile(plan);
+  t.markPlaced(plan.placements[0], true);
+  t.savePlanRunProgress(plan);
+  await t.flushAutoSave();
+  endAutoSave();
+  assert.equal(file.writes.length, 1);
+  assert.equal(t.isPlanBackupJson(file.writes[0]), true);
+  const result = t.restorePlanFromBackupJson(file.writes[0]);
+  assert.equal(result.ok, true);
+  assert.equal(result.placed, 1);
+  assert.equal(t.autoSaveStatus(t.appState.patternPlanState), 'unsupported', 'a restored plan needs its file chosen again');
+});
+
+test('auto-save leaves the file alone for a different or unfinished plan', async () => {
+  const { t } = app;
+  const plan = buildPlan(['WYROBGWYR'], solvedRow(), 1);
+  const file = fakeAutoSaveFile(plan);
+  const newPlan = buildPlan(['GGGYYYBBB'], solvedRow(), 1);
+  assert.equal(newPlan.autoSaveId, undefined);
+  t.savePlanRunProgress(newPlan);
+  await t.flushAutoSave();
+
+  plan.status = 'running';
+  t.savePlanRunProgress(plan);
+  await t.flushAutoSave();
+  endAutoSave();
+  assert.equal(file.writes.length, 0);
+});
+
+test('a blocked or failed auto-save shows up, and failed saves try again', async () => {
+  const { t } = app;
+  const plan = buildPlan(['WYROBGWYR'], solvedRow(), 1);
+  fakeAutoSaveFile(plan, 'NotAllowedError');
+  t.savePlanRunProgress(plan);
+  await t.flushAutoSave();
+  assert.equal(t.autoSaveStatus(plan), 'paused');
+
+  fakeAutoSaveFile(plan, 'NoModificationAllowedError');
+  t.savePlanRunProgress(plan);
+  await t.flushAutoSave();
+  assert.equal(t.autoSaveStatus(plan), 'failed');
+
+  const handleWorks = fakeAutoSaveFile(plan);
+  t.autoSaveFailed = true;
+  await t.retryAutoSave(plan);
+  assert.equal(t.autoSaveStatus(plan), 'on');
+  assert.equal(handleWorks.writes.length, 1);
+  endAutoSave();
+});
+
 test('typed entry visits every sticker except the centers, once each', () => {
   const { t } = app;
   const order = t.PAINT_ENTRY_ORDER;
