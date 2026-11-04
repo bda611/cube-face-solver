@@ -3027,6 +3027,10 @@
  * during development against random trials with full round-trip
  * checks):
  *
+ * Plans now use solveFaceOnly, which finds the shortest turns for the 9
+ * visible stickers alone. The steps below describe solveForFace, kept as
+ * its fallback.
+ *
  *   1. Take a cube's CURRENT 54-letter state (U/R/F/D/L/B cubejs
  *      letters) and a TARGET 3x3 pattern for one chosen face.
  *   2. Construct a legal full-cube target state with that exact
@@ -3403,6 +3407,170 @@ function solveForFace(currentStateStr, targetFace, targetGridLetters) {
     moves: fullSequence === '' ? '(already matches -- no moves needed)' : fullSequence,
     moveCount: fullSequence === '' ? 0 : fullSequence.split(/\s+/).length,
     finalStr, // the verified real resulting 6-face state, for chaining into a future mosaic
+  };
+}
+
+
+// =====================================================================
+// Shortest-turn solver for one face. A mosaic only ever shows 9 stickers,
+// and the center never moves, so only 8 stickers need to be in place. The
+// rest of the cube can end up anywhere, which brings a typical cube down
+// from about 21 turns (solveForFace, aiming at one full arrangement) to
+// about 6.
+//
+// Sequences are built last turn first, tracking which original sticker
+// would end up in each of the 8 target spots. That splits into two small
+// independent searches, 4 corner spots and 4 edge spots, each described by
+// a 4-digit base-24 number. For a given cube and target, a table gives the
+// fewest turns any such state needs to get its 4 stickers right on their
+// own. The larger of the two can never overestimate, so an iterative
+// deepening search using it finds a true shortest sequence.
+// =====================================================================
+const FACE_SOLVE_TOKENS = FACE_ORDER.flatMap(f => [f, f + '2', f + "'"]);
+const FACE_SOLVE_STATES = 24 ** 4;
+const FACE_SOLVE_PLACES = [13824, 576, 24, 1]; // the value of each base-24 digit
+let faceSolveTables = null;
+const faceSolveFaces = {}; // per target face, built the first time it's needed
+
+function getFaceSolveTables() {
+  if (faceSolveTables) return faceSolveTables;
+  const stickerAt = {};
+  const stickers = [];
+  FACE_ORDER.forEach((face, fi) => {
+    for (let k = 0; k < 9; k++) {
+      const cell = CUBE3D_FACE_FNS[face](Math.floor(k / 3), k % 3);
+      stickerAt[`${cell.x},${cell.y},${cell.z},${face}`] = fi * 9 + k;
+      stickers[fi * 9 + k] = { cell, face };
+    }
+  });
+  // clockwise[face][i] = where the sticker at i goes on one clockwise turn.
+  const clockwise = {};
+  FACE_ORDER.forEach(face => {
+    const dir = CUBE3D_FACE_DIR[face];
+    const turn = CUBE3D_ROTATIONS[face];
+    clockwise[face] = stickers.map(({ cell, face: sticker }, i) => {
+      if (cell.x * dir.x + cell.y * dir.y + cell.z * dir.z !== 1) return i;
+      const to = turn(cell);
+      const d = turn(CUBE3D_FACE_DIR[sticker]);
+      return stickerAt[`${to.x},${to.y},${to.z},${CUBE3D_DIR_TO_FACE[`${d.x},${d.y},${d.z}`]}`];
+    });
+  });
+  // comesFrom[m][p] = which sticker move m brings to spot p. Undoing a turn
+  // is the same as continuing clockwise for the rest of a full rotation.
+  const comesFrom = FACE_SOLVE_TOKENS.map(token => {
+    const { face, turns } = cube3dParseMove(token);
+    return Array.from({ length: 54 }, (_, p) => {
+      let at = p;
+      for (let t = 0; t < 4 - turns; t++) at = clockwise[face][at];
+      return at;
+    });
+  });
+  const buildKind = (facelets) => {
+    const digit = new Int16Array(54).fill(-1);
+    facelets.forEach((f, i) => { digit[f] = i; });
+    const steps = comesFrom.map(from => FACE_SOLVE_PLACES.map(place => Int32Array.from(facelets, f => digit[from[f]] * place)));
+    return { facelets, digit, steps, distances: new Uint8Array(FACE_SOLVE_STATES) };
+  };
+  faceSolveTables = { corners: buildKind(CORNER_FACELETS.flat()), edges: buildKind(EDGE_FACELETS.flat()) };
+  return faceSolveTables;
+}
+
+// The search's busiest line, run millions of times per solve.
+const faceSolveStep = (steps, s) => steps[0][(s / 13824) | 0] + steps[1][((s / 576) | 0) % 24] + steps[2][((s / 24) | 0) % 24] + steps[3][s % 24];
+
+// Everything these 4 target spots' stickers can reach, from the start position.
+function getFaceSolveStates(kind, spots) {
+  const start = spots.reduce((acc, f) => acc * 24 + kind.digit[f], 0);
+  const seen = new Uint8Array(FACE_SOLVE_STATES);
+  seen[start] = 1;
+  const list = [start];
+  for (let i = 0; i < list.length; i++) {
+    for (let m = 0; m < kind.steps.length; m++) {
+      const next = faceSolveStep(kind.steps[m], list[i]);
+      if (!seen[next]) { seen[next] = 1; list.push(next); }
+    }
+  }
+  return { start, states: Int32Array.from(list) };
+}
+
+function getFaceSolveFace(face) {
+  if (faceSolveFaces[face]) return faceSolveFaces[face];
+  const { corners, edges } = getFaceSolveTables();
+  const base = FACE_ORDER.indexOf(face) * 9;
+  faceSolveFaces[face] = {
+    corners: getFaceSolveStates(corners, [0, 2, 6, 8].map(k => base + k)),
+    edges: getFaceSolveStates(edges, [1, 3, 5, 7].map(k => base + k)),
+  };
+  return faceSolveFaces[face];
+}
+
+// Fills kind.distances: the fewest turns from each state to one where these
+// 4 spots would all get the wanted colors from this cube.
+function fillFaceSolveDistances(kind, states, cubeStr, wanted) {
+  const { distances, facelets, steps } = kind;
+  distances.fill(255);
+  let frontier = [];
+  for (const s of states) {
+    if (cubeStr[facelets[(s / 13824) | 0]] === wanted[0] && cubeStr[facelets[((s / 576) | 0) % 24]] === wanted[1]
+      && cubeStr[facelets[((s / 24) | 0) % 24]] === wanted[2] && cubeStr[facelets[s % 24]] === wanted[3]) {
+      distances[s] = 0;
+      frontier.push(s);
+    }
+  }
+  for (let d = 1; frontier.length > 0; d++) {
+    const next = [];
+    for (const s of frontier) {
+      for (let m = 0; m < steps.length; m++) {
+        const n = faceSolveStep(steps[m], s);
+        if (distances[n] === 255) { distances[n] = d; next.push(n); }
+      }
+    }
+    frontier = next;
+  }
+}
+
+// Same result shape as solveForFace, and self-verified the same way before
+// returning. Falls back to solveForFace if it can't produce a verified answer.
+function solveFaceOnly(currentStateStr, targetFace, targetGridLetters) {
+  const grid = targetGridLetters.map(row => [...row]);
+  grid[1][1] = targetFace; // center is always the face's own color, physically fixed
+  const flat = grid.flat();
+  const { corners, edges } = getFaceSolveTables();
+  const face = getFaceSolveFace(targetFace);
+  fillFaceSolveDistances(corners, face.corners.states, currentStateStr, [0, 2, 6, 8].map(k => flat[k]));
+  fillFaceSolveDistances(edges, face.edges.states, currentStateStr, [1, 3, 5, 7].map(k => flat[k]));
+  const cornerDistances = corners.distances, edgeDistances = edges.distances;
+  const path = [];
+  const search = (c, e, left, lastFace) => {
+    const needed = Math.max(cornerDistances[c], edgeDistances[e]);
+    if (needed > left) return false;
+    if (left === 0) return true; // needed is 0 here: every spot gets its color
+    for (let m = 0; m < FACE_SOLVE_TOKENS.length; m++) {
+      const f = (m / 3) | 0;
+      if (f === lastFace || f + 3 === lastFace) continue; // same face twice, or opposite faces in the other order
+      path.push(m);
+      if (search(faceSolveStep(corners.steps[m], c), faceSolveStep(edges.steps[m], e), left - 1, f)) return true;
+      path.pop();
+    }
+    return false;
+  };
+  let found = false;
+  const fewest = Math.max(cornerDistances[face.corners.start], edgeDistances[face.edges.start]);
+  for (let depth = fewest; depth <= 22 && !found; depth++) found = search(face.corners.start, face.edges.start, depth, -1);
+  if (!found) return solveForFace(currentStateStr, targetFace, targetGridLetters);
+
+  const moves = path.slice().reverse().map(m => FACE_SOLVE_TOKENS[m]).join(' ');
+  const verifyCube = Cube.fromString(currentStateStr);
+  if (moves !== '') verifyCube.move(moves);
+  const finalStr = verifyCube.asString();
+  if (JSON.stringify(faceGridFromString(finalStr, targetFace)) !== JSON.stringify(grid)) {
+    return solveForFace(currentStateStr, targetFace, targetGridLetters);
+  }
+  return {
+    success: true,
+    moves: moves === '' ? '(already matches -- no moves needed)' : moves,
+    moveCount: path.length,
+    finalStr,
   };
 }
 
@@ -4475,8 +4643,7 @@ function solveForFaceCacheKey(sourceStr, targetFace, cubeGrid) {
 // where), and one may be reachable in fewer turns from this cube's state.
 // Returns { result, rotation }; result.success is false if all failed.
 function bestSolveForTarget(sourceStr, targetFace, cubeGrid, rotationsToTry, cache) {
-  // solveForFace aims for one specific full-cube arrangement, so it would
-  // spend about 20 turns on a cube that already shows the pattern.
+  // Nothing to search for when the cube already shows the pattern, at any rotation.
   const wanted = cubeGrid.flat().join('');
   const alreadyShowing = allFaceOrientations(sourceStr).find(o => o.face === targetFace && o.pattern === wanted);
   if (alreadyShowing) {
@@ -4497,7 +4664,7 @@ function bestSolveForTarget(sourceStr, targetFace, cubeGrid, rotationsToTry, cac
     let result = cache ? cache.get(cacheKey) : null;
     if (!result) {
       try {
-        result = solveForFace(sourceStr, targetFace, naturalGrid);
+        result = solveFaceOnly(sourceStr, targetFace, naturalGrid);
       } catch (e) {
         result = { success: false, error: `Unexpected error: ${e.message}` };
       }
@@ -8725,7 +8892,8 @@ function closeCubePainter() {
 function applyCubeStartToPlacement(placementIndex, startStr, source) {
   const planState = appState.patternPlanState;
   const p = planState.placements[placementIndex];
-  const plannedFromSolved = !p.startSource && p.sourceLabel === 'fresh solved cube';
+  // A cube planned from solved that needs no turns has nothing left to work out.
+  const plannedFromSolved = !p.startSource && p.sourceLabel === 'fresh solved cube' && p.moveCount === 0;
   p.setAside = false;
   if (source === 'solved' && plannedFromSolved) {
     p.startSource = 'solved';
@@ -9045,7 +9213,7 @@ function openCubePainter(placementIndex) {
 
   // If this cube already fits another spot, offer that before spending turns
   // on it here. Only exact matches count: from any starting state the solver
-  // lands around 20 turns, so another spot being "closer" would save little.
+  // usually needs about 6 turns, so another spot being "closer" would save little.
   const offerEl = overlay.querySelector('#paintMatchOffer');
   const closeOffer = () => { offerEl.hidden = true; offerEl.innerHTML = ''; };
   const startFromCube = (btn, str, source) => {
@@ -9058,7 +9226,7 @@ function openCubePainter(placementIndex) {
     offerEl.innerHTML = `
       <div class="paint-target-tile" role="img" aria-label="Pattern ${target.mosaicPattern}">${spotTiles}</div>
       <div class="paint-offer-body">
-        <div><strong>This cube fits ${where} with no turns.</strong> Using it there saves about 20 turns.</div>
+        <div><strong>This cube fits ${where} with no turns.</strong> Using it there saves about 6 turns.</div>
         <div class="paint-offer-actions">
           <button type="button" class="secondary-btn" id="paintOfferAside">Set it aside for ${where}</button>
           <button type="button" class="secondary-btn" id="paintOfferHere">Use it here anyway</button>

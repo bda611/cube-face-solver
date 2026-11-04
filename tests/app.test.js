@@ -95,6 +95,55 @@ test('reaches random targets directly from random scrambled cubes', () => {
   }
 });
 
+test('uses few turns, and the true minimum on cubes one or two turns away', () => {
+  const { t, Cube } = app;
+  const counts = [];
+  for (let i = 0; i < 15; i++) {
+    const start = new Cube().randomize().asString();
+    const pattern = Array.from({ length: 9 }, () => 'RLFDBU'[Math.floor(Math.random() * 6)]);
+    const grid = [pattern.slice(0, 3), pattern.slice(3, 6), pattern.slice(6, 9)];
+    const r = t.solveFaceOnly(start, grid[1][1], grid);
+    assert.equal(r.success, true);
+    counts.push(r.moveCount);
+  }
+  const average = counts.reduce((a, b) => a + b, 0) / counts.length;
+  assert.ok(average < 10, `averaged ${average} turns`);
+
+  // Take a target from a cube, turn it away by a known amount, and ask for it back.
+  const start = scrambled();
+  const grid = t.faceGridFromString(start, 'F');
+  assert.equal(t.solveFaceOnly(start, 'F', grid).moveCount, 0);
+  const turned = new Cube(Cube.fromString(start)).move('R').asString();
+  const back = t.solveFaceOnly(turned, 'F', grid);
+  assert.equal(back.moveCount, 1);
+  assert.equal(back.moves, "R'");
+});
+
+test('keeps the full final state of the cube, with all six sides known', () => {
+  const { t, Cube } = app;
+  const start = scrambled();
+  const grid = [['R', 'L', 'F'], ['B', 'D', 'U'], ['R', 'L', 'F']];
+  const r = t.solveFaceOnly(start, 'D', grid);
+  assert.equal(r.finalStr, new Cube(Cube.fromString(start)).move(r.moves).asString());
+  assert.equal(t.validateCubeState(r.finalStr).ok, true);
+  assert.equal(t.faceGridFromString(r.finalStr, 'D').flat().join(''), grid.flat().join(''));
+});
+
+test('falls back to the whole-cube solver if a result fails its check', () => {
+  const { t } = app;
+  const realFaceGrid = t.faceGridFromString;
+  const start = scrambled();
+  const grid = [['R', 'L', 'F'], ['B', 'D', 'U'], ['R', 'L', 'F']];
+  const quick = t.solveFaceOnly(start, 'D', grid);
+  let calls = 0;
+  // Makes only the first check fail, which is the one inside solveFaceOnly.
+  t.faceGridFromString = (s, f) => (calls++ === 0 ? [['x']] : realFaceGrid(s, f));
+  const fallback = t.solveFaceOnly(start, 'D', grid);
+  t.faceGridFromString = realFaceGrid;
+  assert.equal(fallback.success, true);
+  assert.ok(fallback.moveCount > quick.moveCount, 'should have used the longer whole-cube route');
+});
+
 test('rejects physically impossible cubes', () => {
   const { t } = app;
   const change = {
